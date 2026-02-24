@@ -59,3 +59,7 @@ playwright-report/
 tmp/
 temp/
 *.tmp
+
+# SearXNG local instance data
+searxng-data/
+docker-compose.searxng.yml
