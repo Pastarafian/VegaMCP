@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+
+# Runtime data
+data/
+
+# Environment secrets — NEVER commit
+.env
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+ehthumbs.db
+[Dd]esktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs & test output
+*.log
+setup-log.txt
+setup-stdout.txt
+setup-stderr.txt
+test-stderr.txt
+
+# UsefulCode (private tools — not for public repo)
+UsefulCode/
+
+# Test files
+test-server.mjs
+test-setup.bat
+
+# Playwright
+test-results/
+playwright-report/
+
+# Gemini / AI agent metadata
+.gemini/
+.agent/
+.agents/
+
+# Package lock (optional — remove line if you want deterministic installs)
+# package-lock.json
+
+# SQLite databases (generated at runtime)
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
