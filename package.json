@@ -1,0 +1,29 @@
+{
+  "name": "vegamcp",
+  "version": "3.2.0",
+  "description": "VegaMCP Server v3.2 — Enhanced Intelligence Platform. Agent Swarm, Memory Graph, Knowledge Engine (vector store), Skills Engine, Health Check, Analytics, GitHub Scraper, Web Search (Tavily/SearXNG), Token Budget Manager, Kimi/Ollama support, Code Analysis, Auto-Prompt Library, Browser, Sentry, Multi-Mode Reasoning Router, Bug Taxonomy, PolyAlgo Algorithm Library.",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsx watch src/index.ts",
+    "clean": "rmdir /s /q build 2>nul & echo cleaned",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.6.1",
+    "playwright": "^1.50.0",
+    "sql.js": "^1.11.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
