@@ -34,9 +34,9 @@ test-stderr.txt
 # UsefulCode (private tools — not for public repo)
 UsefulCode/
 
-# Test files
-test-server.mjs
-test-setup.bat
+# Test & audit scripts (development only)
+test-*.mjs
+test-*.bat
 
 # Playwright
 test-results/
@@ -46,9 +46,6 @@ playwright-report/
 .gemini/
 .agent/
 .agents/
-
-# Package lock (optional — remove line if you want deterministic installs)
-# package-lock.json
 
 # SQLite databases (generated at runtime)
 *.db
@@ -60,6 +57,6 @@ tmp/
 temp/
 *.tmp
 
-# SearXNG local instance data
+# SearXNG local instance (dev-only)
 searxng-data/
-docker-compose.searxng.yml
+docker-compose*.yml

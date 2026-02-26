@@ -33,6 +33,8 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  CompleteRequestSchema,
+  SetLevelRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -131,6 +133,39 @@ import { mcpPrompts, getPromptMessages } from './prompts/prompts.js';
 import { initSwarm, getOrchestrator } from './swarm/orchestrator.js';
 import { registerAllAgents } from './swarm/agent-registry.js';
 
+// --- v4.0 Research Scientist Edition ---
+import { memoryBridgeSchema, handleMemoryBridge } from './tools/research/memory_bridge.js';
+import { hypothesisGenSchema, handleHypothesisGen } from './tools/research/hypothesis_gen.js';
+import { selfEvolutionSchema, handleSelfEvolution } from './tools/research/self_evolution.js';
+import { qualityGateSchema, handleQualityGate } from './tools/research/quality_gate.js';
+import { stressTestSchema, handleStressTest } from './tools/research/stress_test.js';
+import { sentinelSchema, handleSentinel } from './tools/research/sentinel.js';
+import { securityScannerSchema, handleSecurityScanner } from './tools/research/security_scanner.js';
+import { synthesisEngineSchema, handleSynthesisEngine } from './tools/research/synthesis_engine.js';
+import { graphRagSchema, handleGraphRag } from './tools/research/graph_rag.js';
+import { llmRouterSchema, handleLlmRouter } from './tools/research/llm_router.js';
+import { toolDiscoverySchema, handleToolDiscovery, agenticRagSchema, handleAgenticRag, seedToolCatalog, recordToolUsage } from './tools/research/discovery_rag.js';
+
+// --- MCP Protocol Extensions (v5.0) ---
+import { setServerRef, mcpLog, getPromptCompletions, getResourceCompletions, registerPromptCompletion, fetchRoots, LogLevel } from './mcp-extensions.js';
+
+// --- v6.0 MCP Protocol Upgrades ---
+import { registerBuiltinSchemas, getOutputSchema, getAllOutputSchemas } from './mcp-protocol/structured-output.js';
+import { elicitationSchema, handleElicitation } from './mcp-protocol/elicitation.js';
+import { withResourceLinks, autoDetectLinks, entityLink } from './mcp-protocol/resource-links.js';
+import { mcpTasksSchema, handleMCPTasks, runAsync } from './mcp-protocol/mcp-tasks.js';
+import { oauthSchema, handleOAuth, getProtectedResourceMetadata } from './mcp-protocol/oauth.js';
+import { gatewaySchema, handleGateway, recordAudit, detectPromptInjection, checkRateLimit } from './mcp-protocol/gateway.js';
+import { sessionSchema, handleSession } from './mcp-protocol/session-manager.js';
+import { a2aProtocolSchema, handleA2AProtocol } from './mcp-protocol/a2a-protocol.js';
+import { toolSearchSchema, handleToolSearch, registerAllSearchableTools } from './mcp-protocol/tool-search.js';
+import { mcpAppsSchema, handleMCPApps } from './mcp-protocol/mcp-apps.js';
+import { agentGraphsSchema, handleAgentGraphs } from './mcp-protocol/agent-graphs.js';
+import { agenticSamplingSchema, handleAgenticSampling } from './mcp-protocol/agentic-sampling-v2.js';
+import { multimodalSchema, handleMultimodal } from './mcp-protocol/multimodal-embeddings.js';
+import { dynamicIndexingSchema, handleDynamicIndexing, startAutoProcessing } from './mcp-protocol/dynamic-indexing.js';
+import { zeroTrustSchema, handleZeroTrust } from './mcp-protocol/zero-trust.js';
+
 // ============================================================
 // Tool Profile System (Lazy Loading)
 // ============================================================
@@ -152,16 +187,88 @@ function getToolProfile(): ToolProfile {
 const server = new Server(
   {
     name: 'REDACTED',
-    version: '3.0.0',
+    version: '6.0.0',
   },
   {
     capabilities: {
       tools: {},
       resources: {},
       prompts: {},
+      logging: {},        // MCP Structured Logging
+      completions: {},    // MCP Autocomplete
     },
+    instructions: 'VegaMCP v6.0 — AI-native MCP server with memory, browser, swarm, research, A2A protocol, MCP Apps (UI), agent graphs, zero-trust identity, gateway security, async tasks (SEP-1686), multimodal embeddings, and agentic sampling v2. Use tool_search to discover tools, graph_rag for retrieval, llm_router for multi-model routing, a2a_protocol for agent communication.',
   }
 );
+
+// Set server reference for MCP extensions (sampling, logging, progress, roots)
+setServerRef(server);
+
+// ═══════════════════════════════════════════════
+// Tool Annotations (MCP 2025 Spec)
+// readOnlyHint: tool only reads data (no side effects)
+// destructiveHint: tool may delete/modify data
+// idempotentHint: repeated calls with same args produce same result
+// openWorldHint: tool may interact with external systems
+// ═══════════════════════════════════════════════
+const TOOL_ANNOTATIONS: Record<string, {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}> = {
+  // Memory tools
+  create_entities: { title: 'Create Entities', destructiveHint: false, readOnlyHint: false, idempotentHint: true },
+  create_relations: { title: 'Create Relations', destructiveHint: false, readOnlyHint: false, idempotentHint: true },
+  add_observations: { title: 'Add Observations', destructiveHint: false, readOnlyHint: false },
+  search_graph: { title: 'Search Knowledge Graph', readOnlyHint: true, idempotentHint: true },
+  open_nodes: { title: 'Open Nodes', readOnlyHint: true, idempotentHint: true },
+  delete_entities: { title: 'Delete Entities', destructiveHint: true },
+  // Browser tools
+  browser_navigate: { title: 'Navigate URL', openWorldHint: true },
+  browser_screenshot: { title: 'Screenshot', readOnlyHint: true, openWorldHint: true },
+  browser_click: { title: 'Click Element', openWorldHint: true },
+  browser_type: { title: 'Type Text', openWorldHint: true },
+  // Research tools (read-only analysis)
+  graph_rag: { title: 'GraphRAG Retrieval', readOnlyHint: true, idempotentHint: true },
+  agentic_rag: { title: 'Agentic RAG', readOnlyHint: true },
+  tool_discovery: { title: 'Tool Discovery', readOnlyHint: true, idempotentHint: true },
+  llm_router: { title: 'Multi-LLM Router', openWorldHint: true },
+  memory_bridge: { title: 'Memory Bridge', readOnlyHint: true },
+  hypothesis_gen: { title: 'Hypothesis Generator', readOnlyHint: false },
+  stress_test: { title: 'Stress Test', readOnlyHint: true },
+  sentinel: { title: 'Sentinel Diagnostics', readOnlyHint: true },
+  security_scanner: { title: 'Security Scanner', readOnlyHint: true, idempotentHint: true },
+  synthesis_engine: { title: 'Synthesis Engine', readOnlyHint: false },
+  // Capability tools
+  ab_test: { title: 'A/B Test', readOnlyHint: false },
+  web_search: { title: 'Web Search', readOnlyHint: true, openWorldHint: true },
+  github_scraper: { title: 'GitHub Scraper', readOnlyHint: true, openWorldHint: true },
+  code_analysis: { title: 'Code Analysis', readOnlyHint: true, idempotentHint: true },
+  analytics: { title: 'Analytics', readOnlyHint: true },
+  health_check: { title: 'Health Check', readOnlyHint: true, idempotentHint: true },
+  // Swarm tools
+  swarm_submit_task: { title: 'Submit Swarm Task', destructiveHint: false },
+  swarm_status: { title: 'Swarm Status', readOnlyHint: true, idempotentHint: true },
+  // Destructive tools
+  shell: { title: 'Shell Execute', destructiveHint: true, openWorldHint: true },
+  filesystem: { title: 'Filesystem', destructiveHint: true },
+  // v6.0 tools
+  elicit: { title: 'AI Elicitation', readOnlyHint: true },
+  mcp_tasks: { title: 'Async Tasks (SEP-1686)', readOnlyHint: false },
+  oauth_manage: { title: 'OAuth Management', readOnlyHint: false },
+  gateway: { title: 'MCP Gateway', readOnlyHint: true },
+  session_manager: { title: 'Session Manager', readOnlyHint: false },
+  a2a_protocol: { title: 'A2A Protocol', openWorldHint: true },
+  tool_search: { title: 'Tool Search', readOnlyHint: true, idempotentHint: true },
+  mcp_apps: { title: 'MCP Apps (UI)', readOnlyHint: true },
+  agent_graphs: { title: 'Agent Graphs', readOnlyHint: false },
+  agentic_sampling_v2: { title: 'Agentic Sampling v2', readOnlyHint: false },
+  multimodal_embeddings: { title: 'Multimodal Embeddings', readOnlyHint: false },
+  dynamic_indexing: { title: 'Dynamic Indexing', readOnlyHint: false },
+  zero_trust: { title: 'Zero-Trust Identity', readOnlyHint: false },
+};
 
 // ============================================================
 // Tool Registry
@@ -317,6 +424,63 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
     tools.push({ schema: codeAnalysisSchema, handler: handleCodeAnalysis });
   }
 
+  // ═══════════════════════════════════════════
+  // v4.0 RESEARCH SCIENTIST EDITION
+  // ═══════════════════════════════════════════
+  if (profile === 'full' || profile === 'research') {
+    tools.push({ schema: memoryBridgeSchema, handler: handleMemoryBridge });
+    tools.push({ schema: hypothesisGenSchema, handler: handleHypothesisGen });
+    tools.push({ schema: selfEvolutionSchema, handler: handleSelfEvolution });
+    tools.push({ schema: qualityGateSchema, handler: handleQualityGate });
+    tools.push({ schema: stressTestSchema, handler: handleStressTest });
+    tools.push({ schema: sentinelSchema, handler: handleSentinel });
+    tools.push({ schema: securityScannerSchema, handler: handleSecurityScanner });
+    tools.push({ schema: synthesisEngineSchema, handler: handleSynthesisEngine });
+
+    // v5.0 — GraphRAG, LLM Router, Tool Discovery, Agentic RAG
+    tools.push({ schema: graphRagSchema, handler: handleGraphRag });
+    tools.push({ schema: llmRouterSchema, handler: handleLlmRouter });
+    tools.push({ schema: toolDiscoverySchema, handler: handleToolDiscovery });
+    tools.push({ schema: agenticRagSchema, handler: handleAgenticRag });
+  }
+
+  // ═══════════════════════════════════════════
+  // v6.0 PROTOCOL UPGRADE TOOLS — always available
+  // ═══════════════════════════════════════════
+  tools.push({ schema: elicitationSchema, handler: handleElicitation });
+  tools.push({ schema: mcpTasksSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleMCPTasks(args) }] };
+  }});
+  tools.push({ schema: oauthSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleOAuth(args) }] };
+  }});
+  tools.push({ schema: gatewaySchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleGateway(args) }] };
+  }});
+  tools.push({ schema: sessionSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleSession(args) }] };
+  }});
+  tools.push({ schema: a2aProtocolSchema, handler: handleA2AProtocol });
+  tools.push({ schema: toolSearchSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleToolSearch(args) }] };
+  }});
+  tools.push({ schema: mcpAppsSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleMCPApps(args) }] };
+  }});
+  tools.push({ schema: agentGraphsSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleAgentGraphs(args) }] };
+  }});
+  tools.push({ schema: agenticSamplingSchema, handler: handleAgenticSampling });
+  tools.push({ schema: multimodalSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleMultimodal(args) }] };
+  }});
+  tools.push({ schema: dynamicIndexingSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleDynamicIndexing(args) }] };
+  }});
+  tools.push({ schema: zeroTrustSchema, handler: async (args: any) => {
+    return { content: [{ type: 'text', text: handleZeroTrust(args) }] };
+  }});
+
   return tools;
 }
 
@@ -324,19 +488,23 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
 // Request Handlers
 // ============================================================
 
-// List available tools
+// List available tools (with MCP 2025 annotations)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = getAvailableTools();
   return {
-    tools: tools.map(t => ({
-      name: t.schema.name,
-      description: t.schema.description,
-      inputSchema: t.schema.inputSchema,
-    })),
+    tools: tools.map(t => {
+      const annotations = TOOL_ANNOTATIONS[t.schema.name];
+      return {
+        name: t.schema.name,
+        description: t.schema.description,
+        inputSchema: t.schema.inputSchema,
+        ...(annotations ? { annotations } : {}),
+      };
+    }),
   };
 });
 
-// Call a tool — with analytics tracking
+// Call a tool — with analytics tracking + gateway audit + prompt injection detection
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const tools = getAvailableTools();
@@ -344,18 +512,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (!tool) {
     recordToolCall(name, 0, false, 'TOOL_NOT_FOUND');
+    recordAudit({ toolName: name, userId: 'system', args: args || {}, durationMs: 0, success: false, error: 'TOOL_NOT_FOUND' });
     return {
       content: [{ type: 'text', text: JSON.stringify({ success: false, error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}. Available tools: ${tools.map(t => t.schema.name).join(', ')}` } }) }],
+    };
+  }
+
+  // Gateway: Prompt injection detection
+  const injection = detectPromptInjection(args || {});
+  if (injection.detected) {
+    recordAudit({ toolName: name, userId: 'system', args: args || {}, durationMs: 0, success: false, blocked: true, blockReason: `Prompt injection detected: ${injection.pattern}` });
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ success: false, error: { code: 'BLOCKED', message: `Request blocked: suspicious pattern detected in field '${injection.field}'` } }) }],
+    };
+  }
+
+  // Gateway: Rate limiting
+  const rateCheck = checkRateLimit(name, 'system');
+  if (!rateCheck.allowed) {
+    recordAudit({ toolName: name, userId: 'system', args: args || {}, durationMs: 0, success: false, blocked: true, blockReason: 'Rate limit exceeded' });
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ success: false, error: { code: 'RATE_LIMITED', message: 'Rate limit exceeded. Try again shortly.' } }) }],
     };
   }
 
   const callStart = Date.now();
   try {
     const result = await tool.handler(args || {});
-    recordToolCall(name, Date.now() - callStart, true);
+    const durationMs = Date.now() - callStart;
+    recordToolCall(name, durationMs, true);
+    recordToolUsage(name); // Track in tool discovery catalog
+    recordAudit({ toolName: name, userId: 'system', args: args || {}, durationMs, success: true });
     return result;
   } catch (err: any) {
-    recordToolCall(name, Date.now() - callStart, false, err.message);
+    const durationMs = Date.now() - callStart;
+    recordToolCall(name, durationMs, false, err.message);
+    recordAudit({ toolName: name, userId: 'system', args: args || {}, durationMs, success: false, error: err.message });
     return {
       content: [{ type: 'text', text: JSON.stringify({ success: false, error: { code: 'TOOL_ERROR', message: err.message } }) }],
     };
@@ -427,6 +619,35 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   };
 });
 
+// ═══════════════════════════════════════════════
+// MCP Completion (Autocomplete for prompts/resources)
+// ═══════════════════════════════════════════════
+server.setRequestHandler(CompleteRequestSchema, async (request) => {
+  const ref = request.params.ref;
+  const arg = request.params.argument;
+
+  if (ref.type === 'ref/prompt') {
+    const completions = getPromptCompletions(ref.name, arg.name, arg.value || '');
+    return { completion: completions };
+  }
+
+  if (ref.type === 'ref/resource') {
+    const completions = getResourceCompletions(ref.uri, arg.value || '');
+    return { completion: completions };
+  }
+
+  return { completion: { values: [] } };
+});
+
+// ═══════════════════════════════════════════════
+// MCP SetLevel (Structured Logging Level Control)
+// ═══════════════════════════════════════════════
+server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+  const level = request.params.level as LogLevel;
+  await mcpLog('info', `Log level set to: ${level}`, 'REDACTED');
+  return {};
+});
+
 // ============================================================
 // Server Lifecycle
 // ============================================================
@@ -461,52 +682,90 @@ async function main(): Promise<void> {
   // Auto-seed PolyAlgo algorithms, EasyPrompts, and BugTaxonomy
   try { autoSeed(); } catch (e: any) { console.error(`[VegaMCP] Seed data error: ${e.message}`); }
 
+  // Seed tool discovery catalog with all built-in tools
+  try {
+    const allTools = getAvailableTools();
+    seedToolCatalog(allTools.map(t => ({ name: t.schema.name, description: t.schema.description || '' })));
+  } catch (e: any) { console.error(`[VegaMCP] Tool catalog seed error: ${e.message}`); }
+
+  // v6.0: Register structured output schemas for all tools
+  try { registerBuiltinSchemas(); } catch (e: any) { console.error(`[VegaMCP] Schema registry error: ${e.message}`); }
+
+  // v6.0: Seed tool search with all registered tools
+  try {
+    const allToolsForSearch = getAvailableTools();
+    registerAllSearchableTools(allToolsForSearch);
+  } catch (e: any) { console.error(`[VegaMCP] Tool search seed error: ${e.message}`); }
+
+  // v6.0: Start dynamic indexing auto-processing
+  try { startAutoProcessing(10000); } catch (e: any) { console.error(`[VegaMCP] Dynamic indexing error: ${e.message}`); }
+
+  // Register prompt completions for autocomplete
+  try {
+    registerPromptCompletion('analyze_code', 'language', () => ({
+      values: ['typescript', 'javascript', 'python', 'go', 'rust', 'java', 'c++'],
+    }));
+    registerPromptCompletion('swarm_task', 'task_type', () => ({
+      values: ['research', 'analysis', 'coding', 'review', 'planning', 'documentation'],
+    }));
+  } catch { /* ignore */ }
+
   // Log available modules to stderr (not stdout — that's for MCP messages)
   const sentryEnabled = !!getSentryConfig();
   const reasoningEnabled = !!(process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.KIMI_API_KEY);
-  const kimiEnabled = !!process.env.KIMI_API_KEY;
-  const ollamaEnabled = true; // Always potentially available
-  const githubEnabled = true; // Works without token (lower rate limit)
-  const webSearchEnabled = !!(process.env.TAVILY_API_KEY || process.env.SEARXNG_URL);
   const profile = getToolProfile();
   const tools = getAvailableTools();
 
-  console.error(`╔══════════════════════════════════════════════════════════════╗`);
-  console.error(`║      VegaMCP Server v3.2.0 — Enhanced Intelligence          ║`);
-  console.error(`╠══════════════════════════════════════════════════════════════╣`);
-  console.error(`║  Core Modules:                                              ║`);
-  console.error(`║    🧠 Memory Graph       ✅ Active                          ║`);
-  console.error(`║    🧪 Playwright Browser ✅ Active (lazy-init)              ║`);
-  console.error(`║    🔍 Sentry             ${(sentryEnabled ? '✅ Active' : '⬚  Not configured').padEnd(32)}  ║`);
-  console.error(`║    🤖 Reasoning Router   ${(reasoningEnabled ? '✅ Active' : '⬚  Not configured').padEnd(32)}  ║`);
-  console.error(`║                                                              ║`);
-  console.error(`║  v3.1 Enhanced Intelligence:                                 ║`);
-  console.error(`║    🌙 Kimi (Moonshot)    ${(kimiEnabled ? '✅ Active (128K ctx)' : '⬚  Not configured').padEnd(32)}  ║`);
-  console.error(`║    🏠 Ollama (Local)     ${(ollamaEnabled ? '✅ Available' : '⬚  Not detected').padEnd(32)}  ║`);
-  console.error(`║    🧮 Token Budget       ✅ Active                          ║`);
-  console.error(`║    🧠 Knowledge Engine   ✅ Active (auto-seeding)           ║`);
-  console.error(`║    🐙 GitHub Scraper     ${(githubEnabled ? '✅ Active' : '⬚  Not configured').padEnd(32)}  ║`);
-  console.error(`║    🔍 Web Search         ${(webSearchEnabled ? '✅ Active' : '⬚  Not configured').padEnd(32)}  ║`);
-  console.error(`║    📋 Prompt Library     ✅ Active (21 templates)           ║`);
-  console.error(`║    🔬 Code Analysis      ✅ Active (5 languages)            ║`);
-  console.error(`║    🎨 Skills Engine      ✅ Active (10 built-in)            ║`);
-  console.error(`║    📊 Analytics          ✅ Active (real-time tracking)     ║`);
-  console.error(`║    🩺 Health Check       ✅ Active                          ║`);
-  console.error(`║                                                              ║`);
-  console.error(`║  Swarm Engine:                                               ║`);
-  console.error(`║    🐝 Orchestrator       ✅ Active (polling)                ║`);
-  console.error(`║    🎯 Swarm Agents       ${String(agents.length).padStart(2)} started                      ║`);
-  console.error(`║    📊 Coordinators       3  (research/quality/ops)          ║`);
-  console.error(`║                                                              ║`);
-  console.error(`║  Configuration:                                              ║`);
-  console.error(`║    🎯 Tool Profile       ${profile.padEnd(36)}  ║`);
-  console.error(`║    🔧 Tools registered   ${String(tools.length).padStart(2)} tools                          ║`);
-  console.error(`║    📁 Data directory     ${dataDir.slice(0, 36).padEnd(36)}  ║`);
-  console.error(`╚══════════════════════════════════════════════════════════════╝`);
+  console.error(`╔══════════════════════════════════════════════════════════════════╗`);
+  console.error(`║      VegaMCP Server v6.0.0 — Protocol Supremacy Edition        ║`);
+  console.error(`╠══════════════════════════════════════════════════════════════════╣`);
+  console.error(`║  Core:                                                          ║`);
+  console.error(`║    🧠 Memory Graph       ✅ Active                              ║`);
+  console.error(`║    🧪 Playwright Browser ✅ Active (lazy-init)                  ║`);
+  console.error(`║    🔍 Sentry             ${(sentryEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
+  console.error(`║    🤖 Reasoning Router   ${(reasoningEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
+  console.error(`║                                                                  ║`);
+  console.error(`║  v5.0 Full Spectrum:                                             ║`);
+  console.error(`║    🔗 GraphRAG           ✅ Hybrid retrieval (vector+graph)      ║`);
+  console.error(`║    🧭 LLM Router        ✅ Multi-model intelligent routing      ║`);
+  console.error(`║    🔎 Tool Discovery     ✅ Dynamic catalog (SQLite)             ║`);
+  console.error(`║    🤖 Agentic RAG       ✅ Autonomous multi-step retrieval      ║`);
+  console.error(`║                                                                  ║`);
+  console.error(`║  v6.0 Protocol Supremacy (17 new features):                      ║`);
+  console.error(`║    📋 Structured Output  ✅ outputSchema + structuredContent     ║`);
+  console.error(`║    💬 AI Elicitation     ✅ AI-driven input via Sampling         ║`);
+  console.error(`║    🔗 Resource Links     ✅ Lazy context in tool results         ║`);
+  console.error(`║    ⚡ MCP Tasks          ✅ Async SEP-1686 (call-now/fetch-later)║`);
+  console.error(`║    🔐 OAuth 2.1          ✅ RFC 9728 Protected Resource          ║`);
+  console.error(`║    🛡️ MCP Gateway        ✅ Audit + injection detection          ║`);
+  console.error(`║    📍 Session Manager    ✅ Resumable sessions                   ║`);
+  console.error(`║    🌐 A2A Protocol       ✅ Agent-to-Agent (Google standard)     ║`);
+  console.error(`║    🔍 Tool Search        ✅ Lazy loading (10x context savings)   ║`);
+  console.error(`║    🎨 MCP Apps           ✅ Interactive HTML dashboards          ║`);
+  console.error(`║    🕸️ Agent Graphs       ✅ Hierarchical DAG orchestration       ║`);
+  console.error(`║    🧠 Agentic Sampling   ✅ Server-side agent loops              ║`);
+  console.error(`║    🎵 Multimodal Embed   ✅ Text+image+audio vector search       ║`);
+  console.error(`║    📡 Dynamic Indexing   ✅ Real-time event-driven reindex       ║`);
+  console.error(`║    🔒 Zero-Trust         ✅ Agent identity + behavior analysis   ║`);
+  console.error(`║    🔄 Scope Consent      ✅ WWW-Authenticate challenges          ║`);
+  console.error(`║    ⏮️ Session Resume     ✅ Mcp-Session-Id reconnection          ║`);
+  console.error(`║                                                                  ║`);
+  console.error(`║  Swarm:                                                          ║`);
+  console.error(`║    🐝 Orchestrator       ✅ Active (adaptive tick rate)          ║`);
+  console.error(`║    🎯 Agents             ${String(agents.length).padStart(2)} started                          ║`);
+  console.error(`║                                                                  ║`);
+  console.error(`║  Config:                                                         ║`);
+  console.error(`║    🎯 Profile            ${profile.padEnd(40)}  ║`);
+  console.error(`║    🔧 Tools              ${String(tools.length).padStart(2)} registered                        ║`);
+  console.error(`║    📁 Data               ${dataDir.slice(0, 40).padEnd(40)}  ║`);
+  console.error(`╚══════════════════════════════════════════════════════════════════╝`);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Post-connect: fetch roots from client (async, non-blocking)
+  fetchRoots().catch(() => {});
 }
 
 // ============================================================
