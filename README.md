@@ -1,41 +1,30 @@
 <p align="center">
-  <h1 align="center">🚀 VegaMCP v3.2</h1>
+  <h1 align="center">🚀 VegaMCP v6.0</h1>
   <p align="center">
-    <strong>AI Agent Swarm Platform — Multi-Model MCP Server</strong>
+    <strong>Protocol Supremacy Edition — AI Agent Swarm Platform</strong>
   </p>
   <p align="center">
     <a href="#features">Features</a> •
     <a href="#quick-start">Quick Start</a> •
     <a href="#architecture">Architecture</a> •
-    <a href="#tools">Tools</a> •
-    <a href="#agents">Agents</a> •
-    <a href="#configuration">Configuration</a> •
-    <a href="#documentation">Docs</a>
+    <a href="#tools">Tools (60+)</a> •
+    <a href="#v60-protocol-features">v6.0 Features</a> •
+    <a href="#configuration">Configuration</a>
   </p>
 </p>
 
 ---
 
-> **VegaMCP** is a production-grade MCP (Model Context Protocol) server that provides an autonomous 10-agent AI swarm, persistent memory, browser automation, multi-model reasoning, and 63+ tools — all accessible via any MCP-compatible client like VS Code, Claude Desktop, or custom integrations.
+> **VegaMCP** is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, and 60+ tools — all accessible via any MCP-compatible client.
 
 ## Features
 
 ### 🧠 Core Intelligence
-- **Multi-Model Reasoning Router** — 9 modes (analyze, quick, code, debug, explain, debate, chain, critique, auto), 25+ models across 10 providers, multi-model debate, conversation memory
+- **Multi-Model Reasoning Router** — 9 modes, 25+ models, multi-model debate, conversation memory
 - **Knowledge Engine** — Semantic vector search with TF-IDF embeddings, auto-deduplication
 - **Persistent Memory Graph** — Entity-relation knowledge graph with SQLite backing
-- **Auto-Prompt Library** — 21 token-optimized templates with auto-selection from context triggers
-
-### 🆕 v3.2 Additions
-- **Multi-Mode Reasoning** — Debate (multi-model synthesis), Chain (decompose→solve→synthesize), Critique (self-review)
-- **Auto-Prompt System** — Context-aware prompt selection with trigger matching
-- **PolyAlgo Library** — 160+ searchable algorithms (AI, NLP, math, optimization, graphics)
-- **Bug Taxonomy** — 17 categories, 400+ keywords for commit/code classification
-- **Updated Models** — Claude Sonnet 4, Claude Opus 4, GPT-4.1, O3-Mini, Gemini 2.5 Flash, Llama 4 Maverick, Qwen 3-235B
-- **System Prompt Presets** — 10 expert personas (engineer, mathematician, security_auditor, architect, etc.)
-- **Health Check** — Full server diagnostics across 9 subsystems
-- **Analytics Dashboard** — Real-time tool usage tracking, latency metrics, error rates
-- **Skills Engine** — 10 built-in skills with auto-activation, vector search, GitHub import
+- **GraphRAG** — Hybrid retrieval (vector + graph traversal)
+- **Agentic RAG** — Autonomous multi-step retrieval with self-evaluation
 
 ### 🐝 Agent Swarm
 - **10 Specialized Agents** across 3 coordinators (Research, Quality, Operations)
@@ -45,25 +34,41 @@
 
 ### 🔧 Capabilities
 - **Code Sandbox** — Python & JavaScript execution in sandboxed environments
-- **Browser Automation** — Headless Chromium via Playwright (navigate, click, type, screenshot)
+- **Browser Automation** — Headless Chromium via Playwright
 - **GitHub Scraper** — Search repos/code/issues, analyze repos, generate knowledge
 - **Web Search** — Tavily AI search + SearXNG fallback
-- **API Gateway** — External HTTP requests with caching, rate limiting, circuit breaker
-- **Webhooks & Watchers** — File system watchers and dynamic webhook endpoints
 - **A/B Testing** — Compare model outputs, track performance stats
 - **Scheduled Tasks** — Cron, interval, and one-time scheduling
 
+### 🆕 v6.0 Protocol Features
+- **Structured Tool Output** — `outputSchema` + `structuredContent` for machine-readable results
+- **AI Elicitation** — Tools request structured input from the AI model via MCP Sampling
+- **Resource Links** — Lazy context loading via resource references in tool results
+- **MCP Tasks (SEP-1686)** — Async call-now/fetch-later with SQLite persistence
+- **OAuth 2.1 Authorization** — JWT validation, scope-based access, RFC 9728 Protected Resource Metadata
+- **MCP Gateway** — Centralized audit logging, rate limiting, prompt injection detection (8 patterns)
+- **Session Manager** — Resumable sessions via `Mcp-Session-Id`, message redelivery
+- **A2A Protocol** — Google's Agent-to-Agent standard for inter-agent communication
+- **Tool Search** — Natural language search with lazy schema loading (10x context savings)
+- **MCP Apps** — Interactive HTML dashboards rendered in sandboxed iframes
+- **Agent Graphs** — Hierarchical DAG orchestration with topological sort
+- **Agentic Sampling v2** — Server-side Plan→Execute→Evaluate→Refine loops
+- **Multimodal Embeddings** — Cross-modal text+image+audio vector search
+- **Dynamic Indexing** — Event-driven real-time re-indexing pipeline
+- **Zero-Trust Identity** — Agent provisioning, behavioral anomaly detection, token rotation
+
 ### 🔒 Security
-- Per-tool rate limiting
-- Input validation & sanitization
-- Path traversal guards
+- OAuth 2.1 Resource Server with JWT validation
+- MCP Gateway with prompt injection detection
+- Zero-trust agent identity with behavioral monitoring
+- Per-tool rate limiting & scope enforcement
+- SQLite audit trail for all operations
 - Token budget management ($5/day, $1/hr defaults)
-- Audit logging for all operations
 
 ## Quick Start
 
 ### Prerequisites
-- **Node.js** 18+ 
+- **Node.js** 18+
 - **npm** 9+
 
 ### Installation
@@ -82,9 +87,6 @@ cp .env.example .env
 
 # Build
 npm run build
-
-# Run integration tests (55 tests)
-node test-server.mjs
 ```
 
 ### Connect to VS Code (Gemini / Copilot)
@@ -109,53 +111,45 @@ Create `.vscode/mcp.json` in your workspace:
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                       VegaMCP v3.0                               │
-│                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐  │
-│  │  Memory   │  │ Browser  │  │  Sentry  │  │   Reasoning    │  │
-│  │  Graph    │  │ (PW)     │  │ (errors) │  │ (Multi-Model)  │  │
-│  └──────────┘  └──────────┘  └──────────┘  └────────────────┘  │
-│                                                                  │
-│  ┌────────────────── AGENT SWARM ─────────────────────────────┐ │
-│  │ ┌──────────┐  ┌──────────┐  ┌────────────┐                │ │
-│  │ │ Research  │  │ Quality  │  │ Operations │  Coordinators  │ │
-│  │ │ (5 agts)  │  │ (2 agts) │  │ (3 agents) │                │ │
-│  │ └──────────┘  └──────────┘  └────────────┘                │ │
-│  │                                                            │ │
-│  │ ┌────────────────────────────────────────────────────────┐ │ │
-│  │ │  Orchestrator: task queue • routing • pipelines        │ │ │
-│  │ └────────────────────────────────────────────────────────┘ │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│  ┌────────────────── CAPABILITIES ────────────────────────────┐ │
-│  │ Sandbox • API Gateway • Watchers • Webhooks • Workflows   │ │
-│  │ Knowledge Engine • GitHub • Web Search • Code Analysis    │ │
-│  │ Prompt Library • A/B Testing • Token Budget • Scheduling  │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        VegaMCP v6.0                                   │
+│                                                                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐       │
+│  │  Memory   │  │ Browser  │  │  Sentry  │  │   Reasoning    │       │
+│  │  Graph    │  │ (PW)     │  │ (errors) │  │ (Multi-Model)  │       │
+│  └──────────┘  └──────────┘  └──────────┘  └────────────────┘       │
+│                                                                       │
+│  ┌─────────────── v6.0 PROTOCOL LAYER ──────────────────────────────┐│
+│  │ Structured Output • A2A Protocol • MCP Tasks • OAuth 2.1        ││
+│  │ Gateway (audit/injection) • Session Manager • Tool Search        ││
+│  │ MCP Apps (UI) • Agent Graphs • Agentic Sampling v2              ││
+│  │ Multimodal Embeddings • Dynamic Indexing • Zero-Trust Identity  ││
+│  │ Resource Links • AI Elicitation • Incremental Scope Consent     ││
+│  └──────────────────────────────────────────────────────────────────┘│
+│                                                                       │
+│  ┌─────────────── AGENT SWARM ──────────────────────────────────────┐│
+│  │ ┌──────────┐  ┌──────────┐  ┌────────────┐                      ││
+│  │ │ Research  │  │ Quality  │  │ Operations │  Coordinators        ││
+│  │ │ (5 agts)  │  │ (2 agts) │  │ (3 agents) │                      ││
+│  │ └──────────┘  └──────────┘  └────────────┘                      ││
+│  │ Orchestrator: task queue • routing • pipelines • triggers       ││
+│  └──────────────────────────────────────────────────────────────────┘│
+│                                                                       │
+│  ┌─────────────── CAPABILITIES ─────────────────────────────────────┐│
+│  │ Sandbox • API Gateway • Watchers • Webhooks • Workflows         ││
+│  │ Knowledge Engine • GitHub • Web Search • Code Analysis          ││
+│  │ Prompt Library • A/B Testing • Token Budget • Scheduling        ││
+│  └──────────────────────────────────────────────────────────────────┘│
+│                                                                       │
+│  ┌────────────────┐  ┌────────────────────────────────────┐         │
+│  │  SQLite + Audit │  │  Vector Store (embeddings)          │         │
+│  └────────────────┘  └────────────────────────────────────┘         │
+└──────────────────────────────────────────────────────────────────────┘
 ```
-
-## Agents
-
-VegaMCP includes 10 domain-agnostic AI agents organized into 3 coordinators:
-
-| Agent | Role | Coordinator | Default Model |
-|-------|------|-------------|---------------|
-| **Researcher** | Deep research & knowledge gathering | Research | DeepSeek R1 |
-| **Analyst** | Data analysis & pattern recognition | Research | DeepSeek R1 |
-| **Coder** | Code generation & technical tasks | Research | DeepSeek Chat |
-| **Planner** | Task decomposition & planning | Research | Claude 3.5 |
-| **Writer** | Content creation & documentation | Research | GPT-4o |
-| **Critic** | Critical analysis & feedback | Quality | DeepSeek R1 |
-| **Reviewer** | Code review & quality assurance | Quality | Claude 3.5 |
-| **Summarizer** | Summary generation & reporting | Operations | GPT-4o |
-| **Monitor** | System health & observability | Operations | DeepSeek Chat |
-| **Integrator** | Cross-system integration tasks | Operations | DeepSeek Chat |
 
 ## Tools
 
-**47 tools** across 6 modules:
+**60+ tools** across 8 modules:
 
 ### Memory (6)
 `create_entities` · `create_relations` · `add_observations` · `search_graph` · `open_nodes` · `delete_entities`
@@ -172,27 +166,14 @@ VegaMCP includes 10 domain-agnostic AI agents organized into 3 coordinators:
 ### Swarm (9)
 `swarm_create_task` · `swarm_get_task_status` · `swarm_cancel_task` · `swarm_list_agents` · `swarm_agent_control` · `swarm_broadcast` · `swarm_get_metrics` · `swarm_register_trigger` · `swarm_run_pipeline`
 
-### Capabilities (19)
+### Research & RAG (10)
+`graph_rag` · `llm_router` · `tool_discovery` · `agentic_rag` · `memory_bridge` · `hypothesis_gen` · `synthesis_engine` · `security_scanner` · `sentinel` · `stress_test`
+
+### v6.0 Protocol (13)
+`elicit` · `mcp_tasks` · `oauth_manage` · `gateway` · `session_manager` · `a2a_protocol` · `tool_search` · `mcp_apps` · `agent_graphs` · `agentic_sampling_v2` · `multimodal_embeddings` · `dynamic_indexing` · `zero_trust`
+
+### Capabilities (19+)
 `sandbox_execute` · `api_request` · `watcher_create` · `watcher_list` · `watcher_delete` · `webhook_create` · `webhook_list` · `webhook_delete` · `webhook_test` · `workflow_execute` · `knowledge_engine` · `github_scraper` · `web_search` · `prompt_library` · `code_analysis` · `token_budget` · `schedule_task` · `notify` · `ab_test`
-
-### Agent Tools (6)
-`agent_conversation` · `agent_dna` · `data_stream` · `goal_tracker` · `reasoning_trace`
-
-## Resources
-
-| URI | Description |
-|-----|-------------|
-| `memory://entities` | All entities in the knowledge graph |
-| `memory://entities/{domain}` | Entities filtered by domain |
-| `memory://relations` | All entity relationships |
-| `memory://domains` | Available domains |
-| `memory://audit` | Recent audit log |
-| `memory://stats` | Memory graph statistics |
-| `sentry://issues/recent` | Recent production errors |
-| `swarm://status` | Live agent status & coordinators |
-| `swarm://tasks/active` | Currently running tasks |
-| `swarm://metrics/dashboard` | Performance metrics |
-| `swarm://triggers` | Event triggers |
 
 ## Configuration
 
@@ -202,21 +183,21 @@ Copy `.env.example` to `.env` and configure:
 # At least one reasoning model key required
 OPENROUTER_API_KEY=          # Supports ALL models via OpenRouter
 DEEPSEEK_API_KEY=            # Direct DeepSeek API (R1 + Chat)
-KIMI_API_KEY=                # Kimi K2.5 for coding (api.kimi.com)
+KIMI_API_KEY=                # Kimi K2.5 for coding
 
 # Optional integrations
-GITHUB_TOKEN=                # GitHub API (increases rate limit 60→5000/hr)
+GITHUB_TOKEN=                # GitHub API (60→5000 req/hr)
 TAVILY_API_KEY=              # AI-powered web search
 SEARXNG_URL=                 # Self-hosted search fallback
-SENTRY_AUTH_TOKEN=           # Error tracking integration
+SENTRY_AUTH_TOKEN=           # Error tracking
 SENTRY_ORG=
 SENTRY_PROJECT=
 
 # Budget controls
-TOKEN_DAILY_BUDGET_USD=5.00  # Max daily API spend
-TOKEN_HOURLY_BUDGET_USD=1.00 # Max hourly API spend
+TOKEN_DAILY_BUDGET_USD=5.00
+TOKEN_HOURLY_BUDGET_USD=1.00
 
-# Tool profiles (controls exposed tools)
+# Tool profiles
 VEGAMCP_TOOL_PROFILE=full    # full | minimal | research | coding | ops
 ```
 
@@ -225,79 +206,34 @@ VEGAMCP_TOOL_PROFILE=full    # full | minimal | research | coding | ops
 ```
 VegaMCP/
 ├── src/
-│   ├── index.ts                     # Server entry point (dotenv + MCP setup)
-│   ├── db/
-│   │   ├── graph-store.ts           # Memory graph (SQLite)
-│   │   └── swarm-store.ts           # Swarm persistence (6 tables)
-│   ├── swarm/
-│   │   ├── types.ts                 # Core type definitions
-│   │   ├── agent-base.ts            # Abstract agent class
-│   │   ├── orchestrator.ts          # Task orchestrator (singleton)
-│   │   ├── agent-registry.ts        # Agent factory
-│   │   └── agents/                  # 10 specialized agents
-│   ├── tools/
-│   │   ├── memory/                  # 6 knowledge graph tools
-│   │   ├── browser/                 # 8 browser automation tools
-│   │   ├── sentry/                  # 4 error tracking tools
-│   │   ├── reasoning/               # Multi-model reasoning router
-│   │   ├── swarm/                   # 9 swarm management tools
-│   │   └── capabilities/            # 19 capability tools
+│   ├── index.ts                     # Server entry point + hub router
+│   ├── mcp-extensions.ts            # Sampling, logging, progress, roots
+│   ├── mcp-protocol/               # v6.0 protocol modules (15 files)
+│   │   ├── structured-output.ts     # outputSchema registry
+│   │   ├── elicitation.ts           # AI-driven input via Sampling
+│   │   ├── resource-links.ts        # Lazy context in tool results
+│   │   ├── mcp-tasks.ts             # Async tasks (SEP-1686)
+│   │   ├── oauth.ts                 # OAuth 2.1 Resource Server
+│   │   ├── gateway.ts               # Audit + injection detection
+│   │   ├── session-manager.ts       # Session resumability
+│   │   ├── a2a-protocol.ts          # Agent-to-Agent communication
+│   │   ├── tool-search.ts           # NL tool search + lazy loading
+│   │   ├── mcp-apps.ts              # Interactive HTML dashboards
+│   │   ├── agent-graphs.ts          # Hierarchical DAG orchestration
+│   │   ├── agentic-sampling-v2.ts   # Server-side agent loops
+│   │   ├── multimodal-embeddings.ts # Cross-modal vector search
+│   │   ├── dynamic-indexing.ts      # Event-driven reindexing
+│   │   └── zero-trust.ts           # Agent identity + behavior
+│   ├── db/                          # SQLite + vector store
+│   ├── swarm/                       # Agent swarm (10 agents)
+│   ├── tools/                       # All tool implementations
 │   ├── resources/                   # MCP resource providers
 │   ├── prompts/                     # MCP prompt templates
-│   └── security/                    # Rate limiter, input validator, path guard
-├── integration/
-│   ├── vegamcp_bridge.py            # FastAPI REST bridge
-│   └── SwarmMonitor.tsx             # React dashboard component
-├── docs/                            # Architecture & module documentation
-├── test-server.mjs                  # 55 integration tests
+│   └── security/                    # Rate limiter, validator, guard
+├── docs/                            # Architecture & module docs
 ├── .env.example                     # Environment template
 ├── package.json
 └── tsconfig.json
-```
-
-## Integration
-
-### FastAPI Bridge
-```python
-from integration.vegamcp_bridge import router
-app.include_router(router, prefix="/api/v1/swarm", tags=["Swarm"])
-```
-
-### React Dashboard
-```tsx
-import SwarmMonitor from './integration/SwarmMonitor';
-<SwarmMonitor />
-```
-
-## Supported Models
-
-| Provider | Models | Key Required |
-| --- | --- | --- |
-| **DeepSeek** | deepseek-r1 (reasoning), deepseek-chat | `DEEPSEEK_API_KEY` |
-| **Kimi / Moonshot** | kimi-for-coding (K2.5, 262K context) | `KIMI_API_KEY` |
-| **Google Gemini** | gemini-2.0-flash, gemini-2.5-pro | `GEMINI_API_KEY` |
-| **Groq** | llama-3.3-70b (fast), mixtral-8x7b | `GROQ_API_KEY` |
-| **Mistral AI** | mistral-large, codestral | `MISTRAL_API_KEY` |
-| **Together AI** | qwen-2.5-72b | `TOGETHER_API_KEY` |
-| **xAI** | grok-3-mini | `XAI_API_KEY` |
-| **OpenAI** | gpt-4o | `OPENROUTER_API_KEY` |
-| **Anthropic** | claude-3.5-sonnet | `OPENROUTER_API_KEY` |
-| **Meta** | llama-3.1-405b | `OPENROUTER_API_KEY` |
-| **Ollama** | Any local model | None (local) |
-
-## Test Results
-
-```
-═══════════════════════════════════════════════════════════
-║  📊 VEGAMCP v3.0.0 TEST RESULTS                       ║
-═══════════════════════════════════════════════════════════
-║  ✅ Passed:  55   tests                                ║
-║  ❌ Failed:  0    tests                                ║
-║  📋 Total:   55   tests                                ║
-═══════════════════════════════════════════════════════════
-
-🎉 ALL TESTS PASSED! VegaMCP v3.0.0 is fully operational.
-   10 agents • 47 tools • 11 resources • 7 prompts
 ```
 
 ## License
@@ -307,5 +243,5 @@ MIT
 ---
 
 <p align="center">
-  Built with TypeScript • MCP SDK • sql.js • Playwright • DeepSeek • Kimi K2.5
+  Built with TypeScript • MCP SDK • sql.js • Playwright • DeepSeek • A2A Protocol
 </p>

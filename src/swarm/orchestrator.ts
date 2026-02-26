@@ -72,6 +72,17 @@ const TASK_TYPE_MAP: Record<string, { coordinator: CoordinatorType; preferredRol
   'summarize':          { coordinator: 'operations', preferredRole: 'summarizer' },
   'generate_report':    { coordinator: 'operations', preferredRole: 'summarizer' },
   'synthesis':          { coordinator: 'operations', preferredRole: 'summarizer' },
+  // Innovation tasks (Tournament of Ideas + Self-Evolution)
+  'hypothesis':         { coordinator: 'innovation', preferredRole: 'visionary' },
+  'hypothesis_generate':{ coordinator: 'innovation', preferredRole: 'visionary' },
+  'creative_ideation':  { coordinator: 'innovation', preferredRole: 'visionary' },
+  'prior_art_search':   { coordinator: 'innovation', preferredRole: 'adversary' },
+  'hypothesis_critique':{ coordinator: 'innovation', preferredRole: 'adversary' },
+  'hypothesis_judge':   { coordinator: 'innovation', preferredRole: 'arbiter' },
+  'feasibility_check':  { coordinator: 'innovation', preferredRole: 'arbiter' },
+  'post_mortem':        { coordinator: 'quality', preferredRole: 'post_mortem' },
+  'failure_analysis':   { coordinator: 'quality', preferredRole: 'post_mortem' },
+  'constraint_extract': { coordinator: 'quality', preferredRole: 'post_mortem' },
 };
 
 // ═══════════════════════════════════════════════
@@ -82,8 +93,25 @@ export class SwarmOrchestrator {
   private agents: Map<string, SwarmAgent> = new Map();
   private coordinators: Map<CoordinatorType, Coordinator> = new Map();
   private pipelines: Map<string, PipelineExecution> = new Map();
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private isRunning: boolean = false;
+
+  // ═══════════════════════════════════════════════
+  // ADAPTIVE TICK RATE (Inspired by Titan Engine)
+  // ═══════════════════════════════════════════════
+  // Three states:
+  //   ACTIVE → 500ms  (tasks flowing)
+  //   IDLE   → 3000ms (30s no activity)
+  //   SLEEP  → 10000ms (2min no activity)
+  private tickState: 'active' | 'idle' | 'sleep' = 'idle';
+  private lastActivityTime: number = Date.now();
+  private tickCount: number = 0;
+
+  private static readonly TICK_ACTIVE_MS = 500;
+  private static readonly TICK_IDLE_MS = 3000;
+  private static readonly TICK_SLEEP_MS = 10000;
+  private static readonly IDLE_THRESHOLD_MS = 30_000;   // 30 seconds → idle
+  private static readonly SLEEP_THRESHOLD_MS = 120_000; // 2 minutes → sleep
 
   constructor() {
     // Initialize coordinators
@@ -98,6 +126,57 @@ export class SwarmOrchestrator {
     this.coordinators.set('operations', new Coordinator('operations', [
       'integrator', 'monitor', 'summarizer',
     ], 5));
+
+    this.coordinators.set('innovation', new Coordinator('innovation', [
+      'visionary', 'adversary', 'arbiter',
+    ], 3));
+  }
+
+  /** Signal that meaningful work happened — snaps tick rate back to ACTIVE */
+  signalActivity(): void {
+    const wasActive = this.tickState === 'active';
+    this.lastActivityTime = Date.now();
+    this.tickState = 'active';
+    // If transitioning from idle/sleep → active, reschedule immediately
+    if (!wasActive && this.isRunning) {
+      this.reschedulePolling();
+    }
+  }
+
+  /** Get the current tick interval based on state */
+  private getCurrentTickMs(): number {
+    switch (this.tickState) {
+      case 'active': return SwarmOrchestrator.TICK_ACTIVE_MS;
+      case 'idle':   return SwarmOrchestrator.TICK_IDLE_MS;
+      case 'sleep':  return SwarmOrchestrator.TICK_SLEEP_MS;
+    }
+  }
+
+  /** Update tick state based on time since last activity */
+  private updateTickState(): void {
+    const elapsed = Date.now() - this.lastActivityTime;
+    if (elapsed > SwarmOrchestrator.SLEEP_THRESHOLD_MS) {
+      if (this.tickState !== 'sleep') {
+        this.tickState = 'sleep';
+        console.error('[Swarm] Tick → SLEEP (10s intervals)');
+      }
+    } else if (elapsed > SwarmOrchestrator.IDLE_THRESHOLD_MS) {
+      if (this.tickState !== 'idle') {
+        this.tickState = 'idle';
+        console.error('[Swarm] Tick → IDLE (3s intervals)');
+      }
+    }
+  }
+
+  /** Cancel and reschedule polling with new tick interval */
+  private reschedulePolling(): void {
+    if (this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (this.isRunning) {
+      this.scheduleNextPoll();
+    }
   }
 
   // --- Initialization ---
@@ -208,6 +287,7 @@ export class SwarmOrchestrator {
     });
 
     console.error(`[Swarm] Task created: ${task.task_id} (${taskType}, P${task.priority})`);
+    this.signalActivity(); // Wake up adaptive tick rate
 
     // If an agent is targeted, dispatch immediately
     if (options.targetAgent) {
@@ -375,32 +455,51 @@ export class SwarmOrchestrator {
     return null;
   }
 
-  // --- Task Queue Polling ---
+  // --- Task Queue Polling (Adaptive Tick Rate) ---
 
-  private startPolling(): void {
-    this.pollTimer = setInterval(() => {
+  /** Schedule the next poll using setTimeout (not setInterval) for dynamic intervals */
+  private scheduleNextPoll(): void {
+    const interval = this.getCurrentTickMs();
+    this.pollTimer = setTimeout(() => {
       this.pollTaskQueue().catch(err => {
         console.error('[Swarm] Poll error:', err.message);
       });
-    }, 2000);
+    }, interval);
+  }
+
+  private startPolling(): void {
+    console.error(`[Swarm] Adaptive polling started (ACTIVE: ${SwarmOrchestrator.TICK_ACTIVE_MS}ms → IDLE: ${SwarmOrchestrator.TICK_IDLE_MS}ms → SLEEP: ${SwarmOrchestrator.TICK_SLEEP_MS}ms)`);
+    this.signalActivity();
+    this.scheduleNextPoll();
   }
 
   private stopPolling(): void {
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
   }
 
   private async pollTaskQueue(): Promise<void> {
     if (!this.isRunning) return;
+    this.tickCount++;
+
+    // Update adaptive tick state
+    this.updateTickState();
 
     // Process queued tasks
-    for (const coordType of ['research', 'quality', 'operations'] as CoordinatorType[]) {
+    let dispatched = false;
+    for (const coordType of ['research', 'quality', 'operations', 'innovation'] as CoordinatorType[]) {
       const task = getNextQueuedTask(coordType);
       if (task) {
         await this.dispatchTask(task.task_id);
+        dispatched = true;
       }
+    }
+
+    // Signal activity if tasks were dispatched
+    if (dispatched) {
+      this.signalActivity();
     }
 
     // Check for stuck tasks (running > 2x timeout)
@@ -414,6 +513,11 @@ export class SwarmOrchestrator {
           await this.cancelTask(task.task_id, 'Timeout exceeded');
         }
       }
+    }
+
+    // Schedule next poll (dynamic interval)
+    if (this.isRunning) {
+      this.scheduleNextPoll();
     }
   }
 
@@ -572,6 +676,14 @@ export class SwarmOrchestrator {
   getStatus() {
     return {
       isRunning: this.isRunning,
+      tickRate: {
+        state: this.tickState,
+        intervalMs: this.getCurrentTickMs(),
+        tickCount: this.tickCount,
+        lastActivity: new Date(this.lastActivityTime).toISOString(),
+        idleSince: Date.now() - this.lastActivityTime > SwarmOrchestrator.IDLE_THRESHOLD_MS
+          ? `${Math.round((Date.now() - this.lastActivityTime) / 1000)}s ago` : null,
+      },
       agents: getAllAgentStates(),
       stats: getSwarmStats(),
       activePipelines: Array.from(this.pipelines.values()).filter(p => p.status === 'running'),

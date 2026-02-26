@@ -18,6 +18,12 @@ import { IntegratorAgent } from './agents/integrator.js';
 import { MonitorAgent } from './agents/monitor.js';
 import { SummarizerAgent } from './agents/summarizer.js';
 
+// Research Scientist Edition — Tournament of Ideas + Self-Evolution
+import { VisionaryAgent } from './agents/visionary.js';
+import { AdversaryAgent } from './agents/adversary.js';
+import { ArbiterAgent } from './agents/arbiter.js';
+import { PostMortemAgent } from './agents/post_mortem.js';
+
 /**
  * Create all agent instances and register them with the orchestrator.
  */
@@ -68,7 +74,25 @@ export function registerAllAgents(): SwarmAgent[] {
   orchestrator.registerAgentInstance(summarizer);
   agents.push(summarizer);
 
-  console.error(`[Swarm] Registered ${agents.length} agents across 3 coordinators`);
+  // --- Innovation Coordinator Agents (Tournament of Ideas) ---
+  const visionary = new VisionaryAgent();
+  orchestrator.registerAgentInstance(visionary);
+  agents.push(visionary);
+
+  const adversary = new AdversaryAgent();
+  orchestrator.registerAgentInstance(adversary);
+  agents.push(adversary);
+
+  const arbiter = new ArbiterAgent();
+  orchestrator.registerAgentInstance(arbiter);
+  agents.push(arbiter);
+
+  // --- Quality Coordinator: Self-Evolution ---
+  const postMortem = new PostMortemAgent();
+  orchestrator.registerAgentInstance(postMortem);
+  agents.push(postMortem);
+
+  console.error(`[Swarm] Registered ${agents.length} agents across 4 coordinators`);
   return agents;
 }
 
@@ -86,4 +110,8 @@ export const AGENT_MAP: Record<string, new () => SwarmAgent> = {
   'integrator': IntegratorAgent,
   'monitor': MonitorAgent,
   'summarizer': SummarizerAgent,
+  'visionary': VisionaryAgent,
+  'adversary': AdversaryAgent,
+  'arbiter': ArbiterAgent,
+  'post_mortem': PostMortemAgent,
 };

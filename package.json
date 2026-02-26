@@ -1,7 +1,7 @@
 {
   "name": "vegamcp",
-  "version": "3.2.0",
-  "description": "VegaMCP Server v3.2 — Enhanced Intelligence Platform. Agent Swarm, Memory Graph, Knowledge Engine (vector store), Skills Engine, Health Check, Analytics, GitHub Scraper, Web Search (Tavily/SearXNG), Token Budget Manager, Kimi/Ollama support, Code Analysis, Auto-Prompt Library, Browser, Sentry, Multi-Mode Reasoning Router, Bug Taxonomy, PolyAlgo Algorithm Library.",
+  "version": "6.0.0",
+  "description": "VegaMCP v6.0 — Protocol Supremacy Edition. 60+ tools, 10-agent swarm, A2A protocol, zero-trust identity, MCP gateway, async tasks (SEP-1686), OAuth 2.1, agent graphs, agentic sampling v2, multimodal embeddings, dynamic indexing, MCP Apps (UI), tool search, structured output, AI elicitation, session manager.",
   "main": "build/index.js",
   "type": "module",
   "scripts": {

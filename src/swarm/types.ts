@@ -7,7 +7,7 @@
 // AGENT TYPES
 // ═══════════════════════════════════════════════
 
-export type CoordinatorType = 'research' | 'quality' | 'operations';
+export type CoordinatorType = 'research' | 'quality' | 'operations' | 'innovation';
 
 export type AgentRole =
   | 'researcher'       // Deep research, information gathering
@@ -19,7 +19,11 @@ export type AgentRole =
   | 'critic'           // Critical analysis, feedback
   | 'integrator'       // System integration, API coordination
   | 'monitor'          // System monitoring, alerting
-  | 'summarizer';      // Synthesis, report generation
+  | 'summarizer'       // Synthesis, report generation
+  | 'visionary'        // Creative hypothesis generation (Tournament of Ideas)
+  | 'adversary'        // Prior art critic, debunker (Tournament of Ideas)
+  | 'arbiter'          // Final judgment, feasibility arbiter (Tournament of Ideas)
+  | 'post_mortem';     // Failure analysis, constraint extraction (Self-Evolution)
 
 export type AgentStatus = 'idle' | 'processing' | 'error' | 'paused' | 'terminated';
 
@@ -136,6 +140,7 @@ export type ModelId =
   | 'deepseek/deepseek-chat'
   | 'anthropic/claude-3.5-sonnet'
   | 'openai/gpt-4o'
+  | 'openai/o3-mini'
   | 'meta-llama/llama-3.1-405b';
 
 export interface ModelRoutingConfig {
@@ -224,4 +229,35 @@ export interface SandboxResult {
   exitCode: number;
   durationMs: number;
   memoryUsedMb?: number;
+}
+
+// ═══════════════════════════════════════════════
+// RESEARCH SCIENTIST TYPES
+// ═══════════════════════════════════════════════
+
+export interface DebateConfig {
+  visionaryModel: ModelId;
+  adversaryModel: ModelId;
+  arbiterModel: ModelId;
+  creativityLevel: number;   // 0.0-1.0
+  rigorLevel: number;        // 0.0-1.0
+  maxDebateRounds: number;
+}
+
+export interface HypothesisPayload {
+  topic: string;
+  seedConcepts: string[];
+  constraints: string[];
+  pastFailures: string[];
+  debateConfig?: Partial<DebateConfig>;
+}
+
+export interface EvolutionMetrics {
+  totalFailures: number;
+  totalConstraints: number;
+  failureAvoidanceRate: number;
+  promotionRate: number;
+  avgConfidence: number;
+  evolutionScore: number;     // 0-100
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
 }
