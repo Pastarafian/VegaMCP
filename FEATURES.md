@@ -66,6 +66,10 @@ In **v7.0**, VegaMCP consolidated over 65+ granular tools into 15 unified core c
     - Compliance and structure testing (Playwright).
     - Actions: `wcag_audit`, `contrast_check`, `keyboard_nav`, `aria_audit`, `screen_reader`, `focus_management`.
 
+16. **🖌️ DESIGN_TOOLKIT (16 Actions) [NEW]**
+    - Universal design generation, knowledge base, and format conversion.
+    - Actions: `color_palette`, `typography`, `component`, `layout`, `design_tokens`, `animation`, `pattern`, `brand_kit`, `design_lint`, `asset_generator`, `compatibility_check`, `format_converter`, `trend_tracker`, `theme_engine`, `efficient_design`, `universal_converter`.
+
 *(Self-Executing mobile-testing features are embedded within protocol actions for testing environments on emulators.)*
 
 ---
