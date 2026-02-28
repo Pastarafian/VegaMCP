@@ -8,6 +8,7 @@
 
 import { logAudit } from '../../db/graph-store.js';
 import { addToVectorStore } from '../../db/vector-store.js';
+import { getCircuitBreaker } from '../../security/circuit-breaker.js';
 
 // ═══════════════════════════════════════════════
 // CONFIGURATION
@@ -85,35 +86,39 @@ async function tavilySearch(
   const apiKey = getTavilyApiKey();
   if (!apiKey) return { results: [], error: 'TAVILY_API_KEY not configured' };
 
+  const breaker = getCircuitBreaker('tavily');
+
   try {
-    const response = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        search_depth: searchDepth,
-        max_results: Math.min(numResults, 20),
-        include_answer: includeAnswer,
-        include_raw_content: false,
-      }),
+    return await breaker.execute(async () => {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query,
+          search_depth: searchDepth,
+          max_results: Math.min(numResults, 20),
+          include_answer: includeAnswer,
+          include_raw_content: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Tavily API error ${response.status}: ${errText.slice(0, 300)}`);
+      }
+
+      const data: any = await response.json();
+      const results: SearchResult[] = (data.results || []).map((r: any) => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.content?.slice(0, 500) || '',
+        score: r.score,
+        publishedDate: r.published_date,
+      }));
+
+      return { results, answer: data.answer };
     });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      return { results: [], error: `Tavily API error ${response.status}: ${errText.slice(0, 300)}` };
-    }
-
-    const data: any = await response.json();
-    const results: SearchResult[] = (data.results || []).map((r: any) => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.content?.slice(0, 500) || '',
-      score: r.score,
-      publishedDate: r.published_date,
-    }));
-
-    return { results, answer: data.answer };
   } catch (err: any) {
     return { results: [], error: `Tavily search failed: ${err.message}` };
   }
@@ -130,25 +135,29 @@ async function searxngSearch(
   const baseUrl = getSearxngUrl();
   if (!baseUrl) return { results: [], error: 'SEARXNG_URL not configured' };
 
+  const breaker = getCircuitBreaker('searxng');
+
   try {
-    const url = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json&categories=general&pageno=1`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
+    return await breaker.execute(async () => {
+      const url = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json&categories=general&pageno=1`;
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`SearXNG error ${response.status}`);
+      }
+
+      const data: any = await response.json();
+      const results: SearchResult[] = (data.results || []).slice(0, numResults).map((r: any) => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.content?.slice(0, 500) || '',
+        publishedDate: r.publishedDate,
+      }));
+
+      return { results };
     });
-
-    if (!response.ok) {
-      return { results: [], error: `SearXNG error ${response.status}` };
-    }
-
-    const data: any = await response.json();
-    const results: SearchResult[] = (data.results || []).slice(0, numResults).map((r: any) => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.content?.slice(0, 500) || '',
-      publishedDate: r.publishedDate,
-    }));
-
-    return { results };
   } catch (err: any) {
     return { results: [], error: `SearXNG search failed: ${err.message}` };
   }
