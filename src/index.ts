@@ -1,5 +1,5 @@
 /**
- * VegaMCP — Main MCP Server Entry Point (v3.0)
+ * VegaMCP — Main MCP Server Entry Point (v7.0)
  * 
  * Hub router that registers all tools, resources, and prompts,
  * then serves them over stdio transport for zero-latency communication
@@ -110,6 +110,12 @@ import { documentReaderSchema, handleDocumentReader } from './tools/capabilities
 import { shellSchema, handleShell } from './tools/capabilities/shell.js';
 import { vaultSchema, handleVault } from './tools/capabilities/vault.js';
 
+// --- v7.0 Testing Suite ---
+import { mobileTestingSchema, handleMobileTesting } from './tools/capabilities/mobile-testing.js';
+import { webTestingSchema, handleWebTesting } from './tools/capabilities/web-testing.js';
+import { apiTestingSchema, handleApiTesting } from './tools/capabilities/api-testing.js';
+import { accessibilitySchema, handleAccessibility } from './tools/capabilities/accessibility-testing.js';
+
 // --- v3.2 Seed Data (PolyAlgo, EasyPrompts, BugTaxonomy) ---
 import { seedDataSchema, handleSeedData, autoSeed } from './seed/seed-runner.js';
 
@@ -120,6 +126,7 @@ import { githubScraperSchema, handleGithubScraper } from './tools/capabilities/g
 import { webSearchSchema, handleWebSearch } from './tools/capabilities/web-search.js';
 import { promptLibrarySchema, handlePromptLibrary } from './tools/capabilities/prompt-library.js';
 import { codeAnalysisSchema, handleCodeAnalysis } from './tools/capabilities/code-analysis.js';
+import { autoUpdateSchema, handleAutoUpdate, startAutoUpdateDaemon } from './tools/capabilities/auto-update.js';
 
 // --- Resources ---
 import { memoryResources, readMemoryResource } from './resources/memory-resources.js';
@@ -187,7 +194,7 @@ function getToolProfile(): ToolProfile {
 const server = new Server(
   {
     name: 'vegamcp',
-    version: '6.0.0',
+    version: '7.0.0',
   },
   {
     capabilities: {
@@ -206,10 +213,6 @@ setServerRef(server);
 
 // ═══════════════════════════════════════════════
 // Tool Annotations (MCP 2025 Spec)
-// readOnlyHint: tool only reads data (no side effects)
-// destructiveHint: tool may delete/modify data
-// idempotentHint: repeated calls with same args produce same result
-// openWorldHint: tool may interact with external systems
 // ═══════════════════════════════════════════════
 const TOOL_ANNOTATIONS: Record<string, {
   title?: string;
@@ -218,19 +221,16 @@ const TOOL_ANNOTATIONS: Record<string, {
   idempotentHint?: boolean;
   openWorldHint?: boolean;
 }> = {
-  // Memory tools
-  create_entities: { title: 'Create Entities', destructiveHint: false, readOnlyHint: false, idempotentHint: true },
-  create_relations: { title: 'Create Relations', destructiveHint: false, readOnlyHint: false, idempotentHint: true },
-  add_observations: { title: 'Add Observations', destructiveHint: false, readOnlyHint: false },
-  search_graph: { title: 'Search Knowledge Graph', readOnlyHint: true, idempotentHint: true },
-  open_nodes: { title: 'Open Nodes', readOnlyHint: true, idempotentHint: true },
-  delete_entities: { title: 'Delete Entities', destructiveHint: true },
-  // Browser tools
-  browser_navigate: { title: 'Navigate URL', openWorldHint: true },
-  browser_screenshot: { title: 'Screenshot', readOnlyHint: true, openWorldHint: true },
-  browser_click: { title: 'Click Element', openWorldHint: true },
-  browser_type: { title: 'Type Text', openWorldHint: true },
-  // Research tools (read-only analysis)
+  // Merged tools
+  memory: { title: 'Memory Graph', readOnlyHint: false },
+  browser: { title: 'Browser Automation', openWorldHint: true },
+  sentry: { title: 'Sentry Error Tracking', readOnlyHint: false, openWorldHint: true },
+  swarm: { title: 'Agent Swarm', readOnlyHint: false },
+  watcher: { title: 'File Watcher', readOnlyHint: false },
+  webhook: { title: 'Webhooks', readOnlyHint: false, openWorldHint: true },
+  agent_intel: { title: 'Agent Intelligence', readOnlyHint: true },
+  agent_ops: { title: 'Agent Operations', readOnlyHint: false },
+  // Research tools
   graph_rag: { title: 'GraphRAG Retrieval', readOnlyHint: true, idempotentHint: true },
   agentic_rag: { title: 'Agentic RAG', readOnlyHint: true },
   tool_discovery: { title: 'Tool Discovery', readOnlyHint: true, idempotentHint: true },
@@ -241,17 +241,12 @@ const TOOL_ANNOTATIONS: Record<string, {
   sentinel: { title: 'Sentinel Diagnostics', readOnlyHint: true },
   security_scanner: { title: 'Security Scanner', readOnlyHint: true, idempotentHint: true },
   synthesis_engine: { title: 'Synthesis Engine', readOnlyHint: false },
-  // Capability tools
-  ab_test: { title: 'A/B Test', readOnlyHint: false },
+  // Core capability tools
   web_search: { title: 'Web Search', readOnlyHint: true, openWorldHint: true },
   github_scraper: { title: 'GitHub Scraper', readOnlyHint: true, openWorldHint: true },
   code_analysis: { title: 'Code Analysis', readOnlyHint: true, idempotentHint: true },
   analytics: { title: 'Analytics', readOnlyHint: true },
   health_check: { title: 'Health Check', readOnlyHint: true, idempotentHint: true },
-  // Swarm tools
-  swarm_submit_task: { title: 'Submit Swarm Task', destructiveHint: false },
-  swarm_status: { title: 'Swarm Status', readOnlyHint: true, idempotentHint: true },
-  // Destructive tools
   shell: { title: 'Shell Execute', destructiveHint: true, openWorldHint: true },
   filesystem: { title: 'Filesystem', destructiveHint: true },
   // v6.0 tools
@@ -268,93 +263,292 @@ const TOOL_ANNOTATIONS: Record<string, {
   multimodal_embeddings: { title: 'Multimodal Embeddings', readOnlyHint: false },
   dynamic_indexing: { title: 'Dynamic Indexing', readOnlyHint: false },
   zero_trust: { title: 'Zero-Trust Identity', readOnlyHint: false },
+  auto_update: { title: 'Auto-Update Daemon', readOnlyHint: false, openWorldHint: true },
+  mobile_testing: { title: 'Mobile App Testing', readOnlyHint: false, openWorldHint: false },
+  web_testing: { title: 'Web Testing Suite', readOnlyHint: true, openWorldHint: true },
+  api_testing: { title: 'API Testing Suite', readOnlyHint: true, openWorldHint: true },
+  accessibility: { title: 'Accessibility Testing', readOnlyHint: true, openWorldHint: true },
 };
 
 // ============================================================
-// Tool Registry
+// Merged Tool Schemas (84 → 52 tools)
 // ============================================================
 
-// Build tool list dynamically based on configuration + profile
+const memorySchema = {
+  name: 'memory',
+  description: 'Knowledge graph operations. Actions: create_entities (create knowledge nodes), create_relations (link entities), add_observations (append facts), search (text search across entities), open_nodes (retrieve by exact name), delete (remove entities).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['create_entities', 'create_relations', 'add_observations', 'search', 'open_nodes', 'delete'], description: 'Operation to perform' },
+      entities: { type: 'array', description: 'Array of {name, type, domain, observations} for create_entities', items: { type: 'object' } },
+      relations: { type: 'array', description: 'Array of {from, to, type} for create_relations', items: { type: 'object' } },
+      entity_name: { type: 'string', description: 'Entity name for add_observations' },
+      observations: { type: 'array', items: { type: 'string' }, description: 'Facts to add (add_observations)' },
+      query: { type: 'string', description: 'Search query (search action)' },
+      domain: { type: 'string', description: 'Filter by domain' },
+      names: { type: 'array', items: { type: 'string' }, description: 'Entity names (open_nodes, delete)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleMemoryDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'create_entities': return handleCreateEntities(args);
+    case 'create_relations': return handleCreateRelations(args);
+    case 'add_observations': return handleAddObservations(args);
+    case 'search': return handleSearchGraph(args);
+    case 'open_nodes': return handleOpenNodes(args);
+    case 'delete': return handleDeleteEntities(args);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown memory action: ${args.action}` }) }] };
+  }
+}
+
+const browserSchema = {
+  name: 'browser',
+  description: 'Browser automation via headless Chromium. Actions: navigate (go to URL), click (click element), type (enter text), screenshot (capture page), snapshot (accessibility tree), execute_js (run JavaScript), console_logs (get logs), close (close browser).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['navigate', 'click', 'type', 'screenshot', 'snapshot', 'execute_js', 'console_logs', 'close'], description: 'Browser action' },
+      url: { type: 'string', description: 'URL (navigate)' },
+      selector: { type: 'string', description: 'CSS selector (click, type)' },
+      text: { type: 'string', description: 'Text to type (type)' },
+      script: { type: 'string', description: 'JavaScript code (execute_js)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleBrowserDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'navigate': return handleBrowserNavigate(args);
+    case 'click': return handleBrowserClick(args);
+    case 'type': return handleBrowserType(args);
+    case 'screenshot': return handleBrowserScreenshot(args);
+    case 'snapshot': return (handleBrowserSnapshot as any)(args);
+    case 'execute_js': return handleBrowserExecuteJs(args);
+    case 'console_logs': return (handleBrowserConsoleLogs as any)(args);
+    case 'close': return handleBrowserClose();
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown browser action: ${args.action}` }) }] };
+  }
+}
+
+const sentrySchema = {
+  name: 'sentry',
+  description: 'Sentry error tracking. Actions: search_issues (find errors), get_detail (full issue info), get_breadcrumbs (event trail), resolve (mark resolved).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['search_issues', 'get_detail', 'get_breadcrumbs', 'resolve'], description: 'Sentry action' },
+      query: { type: 'string', description: 'Search query (search_issues)' },
+      issue_id: { type: 'string', description: 'Issue ID (get_detail, get_breadcrumbs, resolve)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleSentryDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'search_issues': return handleSentrySearchIssues(args);
+    case 'get_detail': return handleSentryGetIssueDetail(args);
+    case 'get_breadcrumbs': return handleSentryGetBreadcrumbs(args);
+    case 'resolve': return handleSentryResolveIssue(args);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown sentry action: ${args.action}` }) }] };
+  }
+}
+
+const swarmSchema = {
+  name: 'swarm',
+  description: 'Agent swarm orchestration. Actions: create_task, get_status, cancel, list_agents, agent_control, broadcast, get_metrics, register_trigger, run_pipeline.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['create_task', 'get_status', 'cancel', 'list_agents', 'agent_control', 'broadcast', 'get_metrics', 'register_trigger', 'run_pipeline'], description: 'Swarm action' },
+      task_id: { type: 'string', description: 'Task ID (get_status, cancel)' },
+      title: { type: 'string', description: 'Task title (create_task)' },
+      description: { type: 'string', description: 'Task description' },
+      priority: { type: 'string', description: 'Task priority' },
+      agent_id: { type: 'string', description: 'Agent ID (agent_control)' },
+      command: { type: 'string', description: 'Control command (agent_control)' },
+      message: { type: 'string', description: 'Broadcast message' },
+      trigger: { type: 'object', description: 'Trigger config (register_trigger)' },
+      pipeline: { type: 'array', description: 'Pipeline steps (run_pipeline)', items: { type: 'object' } },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleSwarmDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'create_task': return handleSwarmCreateTask(args);
+    case 'get_status': return handleSwarmGetTaskStatus(args);
+    case 'cancel': return handleSwarmCancelTask(args);
+    case 'list_agents': return handleSwarmListAgents(args);
+    case 'agent_control': return handleSwarmAgentControl(args);
+    case 'broadcast': return handleSwarmBroadcast(args);
+    case 'get_metrics': return handleSwarmGetMetrics(args);
+    case 'register_trigger': return handleSwarmRegisterTrigger(args);
+    case 'run_pipeline': return handleSwarmRunPipeline(args);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown swarm action: ${args.action}` }) }] };
+  }
+}
+
+const watcherSchema = {
+  name: 'watcher',
+  description: 'File system watchers. Actions: create (watch path for changes), list (show active watchers), delete (stop watching).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['create', 'list', 'delete'], description: 'Watcher action' },
+      path: { type: 'string', description: 'Path to watch (create)' },
+      id: { type: 'string', description: 'Watcher ID (delete)' },
+      patterns: { type: 'array', items: { type: 'string' }, description: 'Glob patterns (create)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleWatcherDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'create': return handleWatcherCreate(args);
+    case 'list': return (handleWatcherList as any)();
+    case 'delete': return handleWatcherDelete(args);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown watcher action: ${args.action}` }) }] };
+  }
+}
+
+const webhookSchema = {
+  name: 'webhook',
+  description: 'Dynamic webhook endpoints. Actions: create (register endpoint), list (show all), delete (remove), test (fire test event).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['create', 'list', 'delete', 'test'], description: 'Webhook action' },
+      id: { type: 'string', description: 'Webhook ID (delete, test)' },
+      url: { type: 'string', description: 'URL (create)' },
+      events: { type: 'array', items: { type: 'string' }, description: 'Event types (create)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleWebhookDispatch(args: any): Promise<any> {
+  switch (args.action) {
+    case 'create': return handleWebhookCreate(args);
+    case 'list': return (handleWebhookList as any)();
+    case 'delete': return handleWebhookDelete(args);
+    case 'test': return handleWebhookTest(args);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown webhook action: ${args.action}` }) }] };
+  }
+}
+
+const agentIntelSchema = {
+  name: 'agent_intel',
+  description: 'Agent intelligence tools. Actions: conversation (inter-agent messaging), dna (agent performance profiles), reasoning_trace (trace reasoning steps).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['conversation', 'dna', 'reasoning_trace'], description: 'Intelligence action' },
+      agent_id: { type: 'string', description: 'Agent ID' },
+      message: { type: 'string', description: 'Message content (conversation)' },
+      thread_id: { type: 'string', description: 'Thread ID (conversation)' },
+      trace_id: { type: 'string', description: 'Trace ID (reasoning_trace)' },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleAgentIntelDispatch(args: any): Promise<any> {
+  const wrap = (fn: (a: any) => string) => ({ content: [{ type: 'text', text: fn(args) }] });
+  switch (args.action) {
+    case 'conversation': return wrap(handleAgentConversation);
+    case 'dna': return wrap(handleAgentDna);
+    case 'reasoning_trace': return wrap(handleReasoningTrace);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown agent_intel action: ${args.action}` }) }] };
+  }
+}
+
+const agentOpsSchema = {
+  name: 'agent_ops',
+  description: 'Agent operational tools. Actions: data_stream (pub/sub data streams), goal_tracker (track goals/milestones), ab_test (compare model outputs).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      action: { type: 'string', enum: ['data_stream', 'goal_tracker', 'ab_test'], description: 'Operations action' },
+      stream_id: { type: 'string', description: 'Stream ID (data_stream)' },
+      goal: { type: 'string', description: 'Goal description (goal_tracker)' },
+      test_name: { type: 'string', description: 'Test name (ab_test)' },
+      variants: { type: 'array', description: 'Test variants (ab_test)', items: { type: 'object' } },
+    },
+    required: ['action'],
+  },
+};
+
+async function handleAgentOpsDispatch(args: any): Promise<any> {
+  const wrap = (fn: (a: any) => string) => ({ content: [{ type: 'text', text: fn(args) }] });
+  switch (args.action) {
+    case 'data_stream': return wrap(handleDataStream);
+    case 'goal_tracker': return wrap(handleGoalTracker);
+    case 'ab_test': return wrap(handleABTest);
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown agent_ops action: ${args.action}` }) }] };
+  }
+}
+
+// ============================================================
+// Tool Registry (Consolidated)
+// ============================================================
+
 function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promise<any> }> {
   const tools: Array<{ schema: any; handler: (args: any) => Promise<any> }> = [];
   const profile = getToolProfile();
 
   // ═══════════════════════════════════════════
-  // MEMORY TOOLS — always available (all profiles)
+  // MEMORY (merged 6→1) — always available
   // ═══════════════════════════════════════════
-  tools.push({ schema: createEntitiesSchema, handler: handleCreateEntities });
-  tools.push({ schema: createRelationsSchema, handler: handleCreateRelations });
-  tools.push({ schema: addObservationsSchema, handler: handleAddObservations });
-  tools.push({ schema: searchGraphSchema, handler: handleSearchGraph });
-  tools.push({ schema: openNodesSchema, handler: handleOpenNodes });
-  tools.push({ schema: deleteEntitiesSchema, handler: handleDeleteEntities });
+  tools.push({ schema: memorySchema, handler: handleMemoryDispatch });
 
   // ═══════════════════════════════════════════
-  // REASONING — always available (all profiles)
+  // REASONING — always available
   // ═══════════════════════════════════════════
   if (process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.KIMI_API_KEY) {
     tools.push({ schema: routeToReasoningModelSchema, handler: handleRouteToReasoningModel });
   }
 
   // ═══════════════════════════════════════════
-  // v3.0 TOKEN BUDGET — always available (all profiles)
+  // CORE (always available)
   // ═══════════════════════════════════════════
   tools.push({ schema: tokenBudgetSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleTokenBudget(args) }] }) });
-
-  // ═══════════════════════════════════════════
-  // v3.0 KNOWLEDGE ENGINE — always available (all profiles)
-  // ═══════════════════════════════════════════
   tools.push({ schema: knowledgeEngineSchema, handler: handleKnowledgeEngine });
-
-  // ═══════════════════════════════════════════
-  // v3.0 PROMPT LIBRARY — always available (all profiles)
-  // ═══════════════════════════════════════════
+  tools.push({ schema: autoUpdateSchema, handler: handleAutoUpdate });
   tools.push({ schema: promptLibrarySchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handlePromptLibrary(args) }] }) });
 
-  // If minimal profile, stop here
   if (profile === 'minimal') return tools;
 
   // ═══════════════════════════════════════════
-  // BROWSER TOOLS — full, research profiles
+  // BROWSER (merged 8→1) — full, research
   // ═══════════════════════════════════════════
   if (profile === 'full' || profile === 'research') {
-    tools.push({ schema: browserNavigateSchema, handler: handleBrowserNavigate });
-    tools.push({ schema: browserClickSchema, handler: handleBrowserClick });
-    tools.push({ schema: browserTypeSchema, handler: handleBrowserType });
-    tools.push({ schema: browserScreenshotSchema, handler: handleBrowserScreenshot });
-    tools.push({ schema: browserSnapshotSchema, handler: handleBrowserSnapshot });
-    tools.push({ schema: browserExecuteJsSchema, handler: handleBrowserExecuteJs });
-    tools.push({ schema: browserConsoleLogsSchema, handler: handleBrowserConsoleLogs });
-    tools.push({ schema: browserCloseSchema, handler: handleBrowserClose });
+    tools.push({ schema: browserSchema, handler: handleBrowserDispatch });
   }
 
   // ═══════════════════════════════════════════
-  // SENTRY TOOLS — full, ops profiles
+  // SENTRY (merged 4→1) — full, ops
   // ═══════════════════════════════════════════
   if ((profile === 'full' || profile === 'ops') && getSentryConfig()) {
-    tools.push({ schema: sentrySearchIssuesSchema, handler: handleSentrySearchIssues });
-    tools.push({ schema: sentryGetIssueDetailSchema, handler: handleSentryGetIssueDetail });
-    tools.push({ schema: sentryGetBreadcrumbsSchema, handler: handleSentryGetBreadcrumbs });
-    tools.push({ schema: sentryResolveIssueSchema, handler: handleSentryResolveIssue });
+    tools.push({ schema: sentrySchema, handler: handleSentryDispatch });
   }
 
   // ═══════════════════════════════════════════
-  // SWARM MANAGEMENT — full, ops profiles
+  // SWARM (merged 9→1) — full, ops
   // ═══════════════════════════════════════════
   if (profile === 'full' || profile === 'ops') {
-    tools.push({ schema: swarmCreateTaskSchema, handler: handleSwarmCreateTask });
-    tools.push({ schema: swarmGetTaskStatusSchema, handler: handleSwarmGetTaskStatus });
-    tools.push({ schema: swarmCancelTaskSchema, handler: handleSwarmCancelTask });
-    tools.push({ schema: swarmListAgentsSchema, handler: handleSwarmListAgents });
-    tools.push({ schema: swarmAgentControlSchema, handler: handleSwarmAgentControl });
-    tools.push({ schema: swarmBroadcastSchema, handler: handleSwarmBroadcast });
-    tools.push({ schema: swarmGetMetricsSchema, handler: handleSwarmGetMetrics });
-    tools.push({ schema: swarmRegisterTriggerSchema, handler: handleSwarmRegisterTrigger });
-    tools.push({ schema: swarmRunPipelineSchema, handler: handleSwarmRunPipeline });
+    tools.push({ schema: swarmSchema, handler: handleSwarmDispatch });
   }
 
   // ═══════════════════════════════════════════
-  // CAPABILITIES — full, coding, research, ops profiles
+  // CAPABILITIES — profile-gated
   // ═══════════════════════════════════════════
   if (profile === 'full' || profile === 'coding') {
     tools.push({ schema: sandboxExecuteSchema, handler: handleSandboxExecute });
@@ -362,38 +556,25 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
 
   if (profile === 'full' || profile === 'ops') {
     tools.push({ schema: apiRequestSchema, handler: handleApiRequest });
-    tools.push({ schema: watcherCreateSchema, handler: handleWatcherCreate });
-    tools.push({ schema: watcherListSchema, handler: handleWatcherList });
-    tools.push({ schema: watcherDeleteSchema, handler: handleWatcherDelete });
-    tools.push({ schema: webhookCreateSchema, handler: handleWebhookCreate });
-    tools.push({ schema: webhookListSchema, handler: handleWebhookList });
-    tools.push({ schema: webhookDeleteSchema, handler: handleWebhookDelete });
-    tools.push({ schema: webhookTestSchema, handler: handleWebhookTest });
+    tools.push({ schema: watcherSchema, handler: handleWatcherDispatch });       // merged 3→1
+    tools.push({ schema: webhookSchema, handler: handleWebhookDispatch });       // merged 4→1
     tools.push({ schema: workflowExecuteSchema, handler: handleWorkflowExecute });
     tools.push({ schema: scheduleToolSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleScheduleTool(args) }] }) });
     tools.push({ schema: notifyToolSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleNotifyTool(args) }] }) });
   }
 
-  // Agent collaboration tools — full, research, ops
+  // Agent tools (merged 6→2) — full, research, ops
   if (profile === 'full' || profile === 'research' || profile === 'ops') {
-    tools.push({ schema: agentConversationSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleAgentConversation(args) }] }) });
-    tools.push({ schema: agentDnaSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleAgentDna(args) }] }) });
-    tools.push({ schema: reasoningTraceSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleReasoningTrace(args) }] }) });
-    tools.push({ schema: dataStreamSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleDataStream(args) }] }) });
-    tools.push({ schema: goalTrackerSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleGoalTracker(args) }] }) });
-    tools.push({ schema: abTestSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleABTest(args) }] }) });
+    tools.push({ schema: agentIntelSchema, handler: handleAgentIntelDispatch });
+    tools.push({ schema: agentOpsSchema, handler: handleAgentOpsDispatch });
   }
 
   // ═══════════════════════════════════════════
-  // v3.1 HEALTH, ANALYTICS, SKILLS — always available
+  // ALWAYS AVAILABLE UTILITIES
   // ═══════════════════════════════════════════
   tools.push({ schema: healthCheckSchema, handler: handleHealthCheck });
   tools.push({ schema: analyticsSchema, handler: handleAnalytics });
   tools.push({ schema: skillsSchema, handler: handleSkills });
-
-  // ═══════════════════════════════════════════
-  // v3.2 NEW TOOL MODULES — always available
-  // ═══════════════════════════════════════════
   tools.push({ schema: filesystemSchema, handler: handleFilesystem });
   tools.push({ schema: gitToolsSchema, handler: handleGitTools });
   tools.push({ schema: sequentialThinkingSchema, handler: handleSequentialThinking });
@@ -404,28 +585,30 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
   tools.push({ schema: seedDataSchema, handler: handleSeedData });
 
   // ═══════════════════════════════════════════
-  // v3.0 ENHANCED INTELLIGENCE TOOLS
+  // TESTING SUITE (v7.0) — full, ops
   // ═══════════════════════════════════════════
+  if (profile === 'full' || profile === 'ops') {
+    tools.push({ schema: mobileTestingSchema, handler: handleMobileTesting });
+    tools.push({ schema: webTestingSchema, handler: handleWebTesting });
+    tools.push({ schema: apiTestingSchema, handler: handleApiTesting });
+    tools.push({ schema: accessibilitySchema, handler: handleAccessibility });
+  }
 
-  // GitHub Scraper — full, research, coding profiles
+  // ═══════════════════════════════════════════
+  // ENHANCED INTELLIGENCE — profile-gated
+  // ═══════════════════════════════════════════
   if (profile === 'full' || profile === 'research' || profile === 'coding') {
     tools.push({ schema: githubScraperSchema, handler: handleGithubScraper });
   }
-
-  // Web Search — full, research profiles
-  if (profile === 'full' || profile === 'research') {
-    if (process.env.TAVILY_API_KEY || process.env.SEARXNG_URL) {
-      tools.push({ schema: webSearchSchema, handler: handleWebSearch });
-    }
+  if ((profile === 'full' || profile === 'research') && (process.env.TAVILY_API_KEY || process.env.SEARXNG_URL)) {
+    tools.push({ schema: webSearchSchema, handler: handleWebSearch });
   }
-
-  // Code Analysis — full, coding profiles
   if (profile === 'full' || profile === 'coding') {
     tools.push({ schema: codeAnalysisSchema, handler: handleCodeAnalysis });
   }
 
   // ═══════════════════════════════════════════
-  // v4.0 RESEARCH SCIENTIST EDITION
+  // RESEARCH SCIENTIST (v4/v5) — full, research
   // ═══════════════════════════════════════════
   if (profile === 'full' || profile === 'research') {
     tools.push({ schema: memoryBridgeSchema, handler: handleMemoryBridge });
@@ -436,8 +619,6 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
     tools.push({ schema: sentinelSchema, handler: handleSentinel });
     tools.push({ schema: securityScannerSchema, handler: handleSecurityScanner });
     tools.push({ schema: synthesisEngineSchema, handler: handleSynthesisEngine });
-
-    // v5.0 — GraphRAG, LLM Router, Tool Discovery, Agentic RAG
     tools.push({ schema: graphRagSchema, handler: handleGraphRag });
     tools.push({ schema: llmRouterSchema, handler: handleLlmRouter });
     tools.push({ schema: toolDiscoverySchema, handler: handleToolDiscovery });
@@ -445,41 +626,21 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
   }
 
   // ═══════════════════════════════════════════
-  // v6.0 PROTOCOL UPGRADE TOOLS — always available
+  // v6.0 PROTOCOL — always available
   // ═══════════════════════════════════════════
   tools.push({ schema: elicitationSchema, handler: handleElicitation });
-  tools.push({ schema: mcpTasksSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleMCPTasks(args) }] };
-  }});
-  tools.push({ schema: oauthSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleOAuth(args) }] };
-  }});
-  tools.push({ schema: gatewaySchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleGateway(args) }] };
-  }});
-  tools.push({ schema: sessionSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleSession(args) }] };
-  }});
+  tools.push({ schema: mcpTasksSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleMCPTasks(args) }] }) });
+  tools.push({ schema: oauthSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleOAuth(args) }] }) });
+  tools.push({ schema: gatewaySchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleGateway(args) }] }) });
+  tools.push({ schema: sessionSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleSession(args) }] }) });
   tools.push({ schema: a2aProtocolSchema, handler: handleA2AProtocol });
-  tools.push({ schema: toolSearchSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleToolSearch(args) }] };
-  }});
-  tools.push({ schema: mcpAppsSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleMCPApps(args) }] };
-  }});
-  tools.push({ schema: agentGraphsSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleAgentGraphs(args) }] };
-  }});
+  tools.push({ schema: toolSearchSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleToolSearch(args) }] }) });
+  tools.push({ schema: mcpAppsSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleMCPApps(args) }] }) });
+  tools.push({ schema: agentGraphsSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleAgentGraphs(args) }] }) });
   tools.push({ schema: agenticSamplingSchema, handler: handleAgenticSampling });
-  tools.push({ schema: multimodalSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleMultimodal(args) }] };
-  }});
-  tools.push({ schema: dynamicIndexingSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleDynamicIndexing(args) }] };
-  }});
-  tools.push({ schema: zeroTrustSchema, handler: async (args: any) => {
-    return { content: [{ type: 'text', text: handleZeroTrust(args) }] };
-  }});
+  tools.push({ schema: multimodalSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleMultimodal(args) }] }) });
+  tools.push({ schema: dynamicIndexingSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleDynamicIndexing(args) }] }) });
+  tools.push({ schema: zeroTrustSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleZeroTrust(args) }] }) });
 
   return tools;
 }
@@ -715,50 +876,62 @@ async function main(): Promise<void> {
   const reasoningEnabled = !!(process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.KIMI_API_KEY);
   const profile = getToolProfile();
   const tools = getAvailableTools();
+  const quiet = process.env.VEGAMCP_QUIET === 'true';
 
-  console.error(`╔══════════════════════════════════════════════════════════════════╗`);
-  console.error(`║      VegaMCP Server v6.0.0 — Protocol Supremacy Edition        ║`);
-  console.error(`╠══════════════════════════════════════════════════════════════════╣`);
-  console.error(`║  Core:                                                          ║`);
-  console.error(`║    🧠 Memory Graph       ✅ Active                              ║`);
-  console.error(`║    🧪 Playwright Browser ✅ Active (lazy-init)                  ║`);
-  console.error(`║    🔍 Sentry             ${(sentryEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
-  console.error(`║    🤖 Reasoning Router   ${(reasoningEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
-  console.error(`║                                                                  ║`);
-  console.error(`║  v5.0 Full Spectrum:                                             ║`);
-  console.error(`║    🔗 GraphRAG           ✅ Hybrid retrieval (vector+graph)      ║`);
-  console.error(`║    🧭 LLM Router        ✅ Multi-model intelligent routing      ║`);
-  console.error(`║    🔎 Tool Discovery     ✅ Dynamic catalog (SQLite)             ║`);
-  console.error(`║    🤖 Agentic RAG       ✅ Autonomous multi-step retrieval      ║`);
-  console.error(`║                                                                  ║`);
-  console.error(`║  v6.0 Protocol Supremacy (17 new features):                      ║`);
-  console.error(`║    📋 Structured Output  ✅ outputSchema + structuredContent     ║`);
-  console.error(`║    💬 AI Elicitation     ✅ AI-driven input via Sampling         ║`);
-  console.error(`║    🔗 Resource Links     ✅ Lazy context in tool results         ║`);
-  console.error(`║    ⚡ MCP Tasks          ✅ Async SEP-1686 (call-now/fetch-later)║`);
-  console.error(`║    🔐 OAuth 2.1          ✅ RFC 9728 Protected Resource          ║`);
-  console.error(`║    🛡️ MCP Gateway        ✅ Audit + injection detection          ║`);
-  console.error(`║    📍 Session Manager    ✅ Resumable sessions                   ║`);
-  console.error(`║    🌐 A2A Protocol       ✅ Agent-to-Agent (Google standard)     ║`);
-  console.error(`║    🔍 Tool Search        ✅ Lazy loading (10x context savings)   ║`);
-  console.error(`║    🎨 MCP Apps           ✅ Interactive HTML dashboards          ║`);
-  console.error(`║    🕸️ Agent Graphs       ✅ Hierarchical DAG orchestration       ║`);
-  console.error(`║    🧠 Agentic Sampling   ✅ Server-side agent loops              ║`);
-  console.error(`║    🎵 Multimodal Embed   ✅ Text+image+audio vector search       ║`);
-  console.error(`║    📡 Dynamic Indexing   ✅ Real-time event-driven reindex       ║`);
-  console.error(`║    🔒 Zero-Trust         ✅ Agent identity + behavior analysis   ║`);
-  console.error(`║    🔄 Scope Consent      ✅ WWW-Authenticate challenges          ║`);
-  console.error(`║    ⏮️ Session Resume     ✅ Mcp-Session-Id reconnection          ║`);
-  console.error(`║                                                                  ║`);
-  console.error(`║  Swarm:                                                          ║`);
-  console.error(`║    🐝 Orchestrator       ✅ Active (adaptive tick rate)          ║`);
-  console.error(`║    🎯 Agents             ${String(agents.length).padStart(2)} started                          ║`);
-  console.error(`║                                                                  ║`);
-  console.error(`║  Config:                                                         ║`);
-  console.error(`║    🎯 Profile            ${profile.padEnd(40)}  ║`);
-  console.error(`║    🔧 Tools              ${String(tools.length).padStart(2)} registered                        ║`);
-  console.error(`║    📁 Data               ${dataDir.slice(0, 40).padEnd(40)}  ║`);
-  console.error(`╚══════════════════════════════════════════════════════════════════╝`);
+  if (quiet) {
+    // Compact single-line output to avoid PowerShell stderr popups
+    console.error(`[VegaMCP v7.0.0] ${tools.length} tools | ${agents.length} agents | profile=${profile}`);
+  } else {
+    console.error(`╔══════════════════════════════════════════════════════════════════╗`);
+    console.error(`║      VegaMCP Server v7.0.0 — Full Spectrum Testing Edition      ║`);
+    console.error(`╠══════════════════════════════════════════════════════════════════╣`);
+    console.error(`║  Core:                                                          ║`);
+    console.error(`║    🧠 Memory Graph       ✅ Active                              ║`);
+    console.error(`║    🧪 Playwright Browser ✅ Active (lazy-init)                  ║`);
+    console.error(`║    🔍 Sentry             ${(sentryEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
+    console.error(`║    🤖 Reasoning Router   ${(reasoningEnabled ? '✅ Active' : '⬚  Not configured').padEnd(36)}  ║`);
+    console.error(`║                                                                  ║`);
+    console.error(`║  v5.0 Full Spectrum:                                             ║`);
+    console.error(`║    🔗 GraphRAG           ✅ Hybrid retrieval (vector+graph)      ║`);
+    console.error(`║    🧭 LLM Router        ✅ Multi-model intelligent routing      ║`);
+    console.error(`║    🔎 Tool Discovery     ✅ Dynamic catalog (SQLite)             ║`);
+    console.error(`║    🤖 Agentic RAG       ✅ Autonomous multi-step retrieval      ║`);
+    console.error(`║                                                                  ║`);
+    console.error(`║  v6.0 Protocol Supremacy (17 new features):                      ║`);
+    console.error(`║    📋 Structured Output  ✅ outputSchema + structuredContent     ║`);
+    console.error(`║    💬 AI Elicitation     ✅ AI-driven input via Sampling         ║`);
+    console.error(`║    🔗 Resource Links     ✅ Lazy context in tool results         ║`);
+    console.error(`║    ⚡ MCP Tasks          ✅ Async SEP-1686 (call-now/fetch-later)║`);
+    console.error(`║    🔐 OAuth 2.1          ✅ RFC 9728 Protected Resource          ║`);
+    console.error(`║    🛡️ MCP Gateway        ✅ Audit + injection detection          ║`);
+    console.error(`║    📍 Session Manager    ✅ Resumable sessions                   ║`);
+    console.error(`║    🌐 A2A Protocol       ✅ Agent-to-Agent (Google standard)     ║`);
+    console.error(`║    🔍 Tool Search        ✅ Lazy loading (10x context savings)   ║`);
+    console.error(`║    🎨 MCP Apps           ✅ Interactive HTML dashboards          ║`);
+    console.error(`║    🕸️ Agent Graphs       ✅ Hierarchical DAG orchestration       ║`);
+    console.error(`║    🧠 Agentic Sampling   ✅ Server-side agent loops              ║`);
+    console.error(`║    🎵 Multimodal Embed   ✅ Text+image+audio vector search       ║`);
+    console.error(`║    📡 Dynamic Indexing   ✅ Real-time event-driven reindex       ║`);
+    console.error(`║    🔒 Zero-Trust         ✅ Agent identity + behavior analysis   ║`);
+    console.error(`║    🔄 Scope Consent      ✅ WWW-Authenticate challenges          ║`);
+    console.error(`║    ⏮️ Session Resume     ✅ Mcp-Session-Id reconnection          ║`);
+    console.error(`║                                                                  ║`);
+    console.error(`║  v7.0 Testing Suite (4 AI-first testing tools):                   ║`);
+    console.error(`║    📱 Mobile Testing     ✅ Android + iOS (30+ actions)          ║`);
+    console.error(`║    🌐 Web Testing        ✅ Lighthouse, CWV, responsive, forms   ║`);
+    console.error(`║    🔌 API Testing        ✅ Contract, load, sequence, diff       ║`);
+    console.error(`║    ♿ Accessibility      ✅ WCAG, contrast, keyboard, ARIA       ║`);
+    console.error(`║                                                                  ║`);
+    console.error(`║  Swarm:                                                          ║`);
+    console.error(`║    🐝 Orchestrator       ✅ Active (adaptive tick rate)          ║`);
+    console.error(`║    🎯 Agents             ${String(agents.length).padStart(2)} started                          ║`);
+    console.error(`║                                                                  ║`);
+    console.error(`║  Config:                                                         ║`);
+    console.error(`║    🎯 Profile            ${profile.padEnd(40)}  ║`);
+    console.error(`║    🔧 Tools              ${String(tools.length).padStart(2)} registered                        ║`);
+    console.error(`║    📁 Data               ${dataDir.slice(0, 40).padEnd(40)}  ║`);
+    console.error(`╚══════════════════════════════════════════════════════════════════╝`);
+  }
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
@@ -766,6 +939,9 @@ async function main(): Promise<void> {
 
   // Post-connect: fetch roots from client (async, non-blocking)
   fetchRoots().catch(() => {});
+
+  // Start auto-update daemon (refreshes knowledge base in background)
+  startAutoUpdateDaemon();
 }
 
 // ============================================================

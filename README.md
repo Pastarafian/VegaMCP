@@ -1,21 +1,21 @@
 <p align="center">
-  <h1 align="center">🚀 VegaMCP v6.0</h1>
+  <h1 align="center">🚀 VegaMCP v7.0</h1>
   <p align="center">
-    <strong>Protocol Supremacy Edition — AI Agent Swarm Platform</strong>
+    <strong>Full Spectrum Testing Edition — AI Agent Swarm Platform</strong>
   </p>
   <p align="center">
     <a href="#features">Features</a> •
     <a href="#quick-start">Quick Start</a> •
     <a href="#architecture">Architecture</a> •
-    <a href="#tools">Tools (60+)</a> •
-    <a href="#v60-protocol-features">v6.0 Features</a> •
+    <a href="#tools">Tools (65+)</a> •
+    <a href="#v70-testing-suite">v7.0 Testing Suite</a> •
     <a href="#configuration">Configuration</a>
   </p>
 </p>
 
 ---
 
-> **VegaMCP** is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, and 60+ tools — all accessible via any MCP-compatible client.
+> **VegaMCP** is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, AI-first testing suite (mobile, web, API, accessibility), and 65+ tools — all accessible via any MCP-compatible client.
 
 ## Features
 
@@ -56,6 +56,12 @@
 - **Multimodal Embeddings** — Cross-modal text+image+audio vector search
 - **Dynamic Indexing** — Event-driven real-time re-indexing pipeline
 - **Zero-Trust Identity** — Agent provisioning, behavioral anomaly detection, token rotation
+
+### 🧪 v7.0 Testing Suite
+- **Mobile Testing** — Android emulator + iOS simulator control, screenshots, UI trees, logcat, performance profiling
+- **Web Testing** — Lighthouse audits, Core Web Vitals, responsive testing, CSS coverage, console/network/form/link/storage audits
+- **API Testing** — OpenAPI discovery, contract testing, load testing, auth flow, sequence testing, diff testing
+- **Accessibility Testing** — WCAG 2.1 AA/AAA audits, color contrast, keyboard navigation, ARIA validation, screen reader compat
 
 ### 🔒 Security
 - OAuth 2.1 Resource Server with JWT validation
@@ -112,7 +118,7 @@ Create `.vscode/mcp.json` in your workspace:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        VegaMCP v6.0                                   │
+│                        VegaMCP v7.0                                   │
 │                                                                       │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐       │
 │  │  Memory   │  │ Browser  │  │  Sentry  │  │   Reasoning    │       │
@@ -149,7 +155,7 @@ Create `.vscode/mcp.json` in your workspace:
 
 ## Tools
 
-**60+ tools** across 8 modules:
+**65+ tools** across 9 modules:
 
 ### Memory (6)
 `create_entities` · `create_relations` · `add_observations` · `search_graph` · `open_nodes` · `delete_entities`
@@ -174,6 +180,9 @@ Create `.vscode/mcp.json` in your workspace:
 
 ### Capabilities (19+)
 `sandbox_execute` · `api_request` · `watcher_create` · `watcher_list` · `watcher_delete` · `webhook_create` · `webhook_list` · `webhook_delete` · `webhook_test` · `workflow_execute` · `knowledge_engine` · `github_scraper` · `web_search` · `prompt_library` · `code_analysis` · `token_budget` · `schedule_task` · `notify` · `ab_test`
+
+### Testing Suite (4) 🆕
+`mobile_testing` (30+ actions) · `web_testing` (10 actions) · `api_testing` (8 actions) · `accessibility` (6 actions)
 
 ## Configuration
 

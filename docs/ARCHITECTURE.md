@@ -1,270 +1,343 @@
-# VegaMCP â€” Master Architecture Document
+# VegaMCP v7.0 — Architecture
 
-> **Version:** 1.0.0  
-> **Last Updated:** 2026-02-23  
-> **Transport:** stdio (local, zero-latency)  
-> **Runtime:** Node.js + TypeScript  
-> **SDK:** `@modelcontextprotocol/sdk`
+> **Version:** 7.0 (Protocol Supremacy + Full Testing Platform)  
+> **Updated:** 2026-02-28  
+> **Previous:** v1.0 Hub-and-Spoke → v6.0 Multi-Module → v7.0 Unified Clusters
 
 ---
 
-## 1. System Overview
+## 1. High-Level Architecture
 
-VegaMCP is a multi-tool MCP (Model Context Protocol) server designed for Google Antigravity.  
-It operates on a **Hub-and-Spoke** model optimized for agentic IDE workflows.
-
-```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚                  ANTIGRAVITY (Host)                   â”‚
-â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚
-â”‚  â”‚ Gemini 3   â”‚â—„â”€â”€â–ºâ”‚  Built-in MCP Client          â”‚  â”‚
-â”‚  â”‚ Pro Agent   â”‚    â”‚  (routes tool calls via stdio) â”‚  â”‚
-â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                  â”‚ stdio (stdin/stdout)
-                                  â–¼
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚               VEGAMCP SERVER (The Hub)                â”‚
-â”‚                                                      â”‚
-â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â” â”‚
-â”‚  â”‚ Memory  â”‚  â”‚ Browser  â”‚  â”‚ Sentry â”‚  â”‚Reason- â”‚ â”‚
-â”‚  â”‚ Graph   â”‚  â”‚Playwrightâ”‚  â”‚Observ- â”‚  â”‚  ing   â”‚ â”‚
-â”‚  â”‚ Module  â”‚  â”‚ Module   â”‚  â”‚ability â”‚  â”‚ Router â”‚ â”‚
-â”‚  â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”¬â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”¬â”€â”€â”€â”€â”˜ â”‚
-â”‚       â”‚            â”‚            â”‚            â”‚      â”‚
-â”‚  â”Œâ”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â” â”‚
-â”‚  â”‚          Security Guardrails Layer             â”‚ â”‚
-â”‚  â”‚  (Path Guard Â· Rate Limiter Â· Input Validator) â”‚ â”‚
-â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ â”‚
-â”‚                                                      â”‚
-â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â” â”‚
-â”‚  â”‚   SQLite Graph    â”‚  â”‚     .env (API Keys)      â”‚ â”‚
-â”‚  â”‚   (memory.db)     â”‚  â”‚  DeepSeek Â· Sentry Â· etc â”‚ â”‚
-â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-```
-
----
-
-## 2. MCP Primitives Exposed
-
-VegaMCP exposes all three MCP primitive types:
-
-### 2.1 Tools (Actions the AI Can Invoke)
-
-| Module        | Tool Name                  | Purpose                                        |
-| ------------- | -------------------------- | ---------------------------------------------- |
-| **Memory**    | `create_entities`          | Create new knowledge nodes                     |
-| **Memory**    | `create_relations`         | Link entities with typed relationships         |
-| **Memory**    | `add_observations`         | Append timestamped facts to entities           |
-| **Memory**    | `search_graph`             | Full-text + fuzzy search across the graph      |
-| **Memory**    | `open_nodes`               | Retrieve specific entities by name             |
-| **Memory**    | `delete_entities`          | Remove entities and their relations            |
-| **Browser**   | `browser_navigate`         | Navigate to a URL                              |
-| **Browser**   | `browser_click`            | Click an element by selector or text           |
-| **Browser**   | `browser_type`             | Type text into an input field                  |
-| **Browser**   | `browser_screenshot`       | Capture a PNG screenshot                       |
-| **Browser**   | `browser_snapshot`         | Get accessibility tree snapshot                |
-| **Browser**   | `browser_execute_js`       | Execute JavaScript in the page                 |
-| **Browser**   | `browser_console_logs`     | Retrieve captured console output               |
-| **Browser**   | `browser_close`            | Close the browser session                      |
-| **Sentry**    | `sentry_search_issues`     | Search/filter production issues                |
-| **Sentry**    | `sentry_get_issue_detail`  | Get full stack trace + metadata                |
-| **Sentry**    | `sentry_get_breadcrumbs`   | Get user navigation trail                      |
-| **Sentry**    | `sentry_resolve_issue`     | Mark issue as resolved (requires confirmation) |
-| **Reasoning** | `route_to_reasoning_model` | Send complex problems to external models       |
-
-### 2.2 Resources (Read-Only Data)
-
-| Resource URI                 | Description                                |
-| ---------------------------- | ------------------------------------------ |
-| `memory://entities`          | Browse all entities in the knowledge graph |
-| `memory://entities/{domain}` | Browse entities filtered by domain         |
-| `memory://relations`         | Browse all relationships                   |
-| `sentry://issues/recent`     | Live feed of recent production errors      |
-
-### 2.3 Prompts (Pre-Built Workflow Templates)
-
-| Prompt Name           | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `investigate_error`   | Chains: Sentry lookup â†’ source correlation â†’ fix generation |
-| `architecture_review` | Queries memory graph + analyzes codebase structure          |
-
----
-
-## 3. Module Specifications
-
-Each module has its own detailed specification document:
-
-- **[Memory Module](./MEMORY_MODULE.md)** â€” Persistent knowledge graph with SQLite + FTS5
-- **[Browser Module](./BROWSER_MODULE.md)** â€” Playwright-powered headless browser automation
-- **[Sentry Module](./SENTRY_MODULE.md)** â€” Live production error observability
-- **[Reasoning Module](./REASONING_MODULE.md)** â€” Multi-model intelligence routing
-- **[Security](./SECURITY.md)** â€” Guardrails, rate limiting, and input validation
-
----
-
-## 4. Data Flow
-
-### 4.1 Typical Debugging Workflow
+VegaMCP v7.0 is an **AI-native MCP server** that consolidates 60+ capabilities into **15 unified tool clusters** served over stdio/SSE transport. It follows a **Cluster-Action-Dispatch** pattern where each tool cluster contains related actions routed through a unified dispatcher.
 
 ```
-User: "There's a crash in production, investigate and fix it."
-
-1. AI calls `sentry_search_issues({ query: "crash", status: "unresolved" })`
-2. Server queries Sentry API â†’ returns top 5 issues
-3. AI calls `sentry_get_issue_detail({ issue_id: "PROJ-1234" })`
-4. Server fetches full stack trace + environment + tags
-5. AI calls `sentry_get_breadcrumbs({ issue_id: "PROJ-1234" })`
-6. Server returns user navigation path before crash
-7. AI cross-references stack trace with local codebase
-8. If logic is complex, AI calls `route_to_reasoning_model({ ... })`
-9. AI drafts the fix and applies it
-10. AI calls `create_entities` + `add_observations` to record the fix
-11. AI calls `browser_navigate` + `browser_click` to verify the fix
-12. AI calls `sentry_resolve_issue({ issue_id: "PROJ-1234" })`
-```
-
-### 4.2 Memory-First Workflow
-
-```
-User: "Remember that we use camelCase for all API endpoints."
-
-1. AI calls `create_entities({ entities: [{ name: "API Style Guide", type: "convention", domain: "coding-style" }] })`
-2. AI calls `add_observations({ entity: "API Style Guide", observations: ["All API endpoints use camelCase naming"] })`
-
---- Next Session ---
-
-User: "Create a new user preferences endpoint."
-
-1. AI checks `search_graph({ query: "API style convention" })`
-2. Memory returns: "All API endpoints use camelCase naming"
-3. AI creates endpoint following the stored convention
+┌───────────────────────────────────────────────────────────────┐
+│                        AI Agent Client                        │
+│              (Claude Code / Kimi Code / Codex CLI)            │
+└────────────────────────────┬──────────────────────────────────┘
+                             │ MCP Protocol (stdio / SSE)
+┌────────────────────────────▼──────────────────────────────────┐
+│                    VegaMCP v7.0 Server                        │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                  Gateway Layer                          │  │
+│  │  Security · Rate Limiting · Prompt Injection · Audit    │  │
+│  └─────────────────────────┬───────────────────────────────┘  │
+│  ┌─────────────────────────▼───────────────────────────────┐  │
+│  │               Unified Dispatch Router                   │  │
+│  │  Tool Selection → Action Routing → Handler Resolution   │  │
+│  └─────────────────────────┬───────────────────────────────┘  │
+│  ┌─────────────────────────▼───────────────────────────────┐  │
+│  │               15 Capability Clusters                    │  │
+│  │                                                         │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │  │
+│  │  │ memory  │ │   web   │ │  code   │ │   ai    │      │  │
+│  │  │ 6 acts  │ │ 10 acts │ │ 7 acts  │ │ 8 acts  │      │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │  │
+│  │  │  swarm  │ │  data   │ │   ops   │ │security │      │  │
+│  │  │ 9 acts  │ │ 5 acts  │ │ 8 acts  │ │ 5 acts  │      │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │  │
+│  │  │ create  │ │protocol │ │ sentry  │ │  intel  │      │  │
+│  │  │ 3 acts  │ │ 11 acts │ │ 4 acts  │ │ 3 acts  │      │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────────┐            │  │
+│  │  │web_test  │ │api_test  │ │accessibility │  ← NEW     │  │
+│  │  │ 10 acts  │ │ 8 acts   │ │   6 acts     │            │  │
+│  │  └──────────┘ └──────────┘ └──────────────┘            │  │
+│  │                                                         │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │               Backward Compatibility Layer              │  │
+│  │  60+ v6 tool names → v7 cluster:action aliases          │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                  Shared Infrastructure                  │  │
+│  │  SQLite · ChromaDB · Playwright · Analytics · Caching   │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Technology Stack
+## 2. Directory Structure
 
-| Component   | Technology                  | Rationale                                  |
-| ----------- | --------------------------- | ------------------------------------------ |
-| Runtime     | Node.js 20+                 | First-class MCP SDK support                |
-| Language    | TypeScript 5.x              | Type safety for tool schemas               |
-| MCP SDK     | `@modelcontextprotocol/sdk` | Official SDK                               |
-| Database    | better-sqlite3 + FTS5       | Zero-config, fast, persistent              |
-| Browser     | Playwright                  | Industry standard, headless, multi-browser |
-| HTTP Client | Node fetch (built-in)       | Sentry & DeepSeek API calls                |
-| Validation  | Zod                         | Runtime schema validation                  |
-| Transport   | stdio                       | Zero-latency local communication           |
+```
+src/
+├── index.ts                         # Server entry point, tool registry, request handler
+├── tools/
+│   ├── browser/                     # 9 files → merged into 'web' cluster
+│   │   ├── browser-manager.ts       # Playwright browser lifecycle
+│   │   ├── navigate.ts              # Page navigation
+│   │   ├── interact.ts              # Click, type, screenshot, snapshot
+│   │   └── ...                      # console-logs, execute-js, close
+│   ├── capabilities/                # 31 files → individual tools being consolidated
+│   │   ├── mobile-testing.ts        # ✅ Mobile testing (39KB, Android + iOS)
+│   │   ├── web-testing.ts           # 🔄 Web QA (Lighthouse, CWV, visual regression)
+│   │   ├── api-testing.ts           # 🔄 API QA (contract, load, sequence, mock)
+│   │   ├── accessibility-testing.ts # 🔄 A11y (WCAG, contrast, keyboard, ARIA)
+│   │   ├── sandbox.ts               # Code execution sandbox
+│   │   ├── code-analysis.ts         # AST analysis engine
+│   │   ├── shell.ts                 # Shell command execution
+│   │   ├── filesystem.ts            # File operations
+│   │   ├── git-tools.ts             # Git operations
+│   │   ├── web-search.ts            # Tavily/SearXNG search
+│   │   ├── github-scraper.ts        # GitHub code/repo search
+│   │   ├── database.ts              # SQLite query engine
+│   │   ├── analytics.ts             # Usage analytics
+│   │   ├── vault.ts                 # Obsidian-style note vault
+│   │   ├── health-check.ts          # System diagnostics
+│   │   ├── auto-update.ts           # Knowledge base auto-refresh
+│   │   ├── notify.ts                # User notifications
+│   │   ├── schedule.ts              # Task scheduling (cron, interval)
+│   │   ├── workflow.ts              # Multi-step state machines
+│   │   ├── api-gateway.ts           # HTTP request gateway
+│   │   ├── knowledge-engine.ts      # Vector search + dedup
+│   │   ├── prompt-library.ts        # 20+ token-optimized templates
+│   │   ├── skills.ts                # SKILL.md management
+│   │   ├── document-reader.ts       # Multi-format document parsing
+│   │   ├── sequential-thinking.ts   # Chain-of-thought reasoning
+│   │   └── token-budget.ts          # Cost tracking
+│   ├── memory/                      # 6 files → already merged into 'memory' cluster
+│   ├── reasoning/                   # 1 file → route-to-reasoning-model
+│   ├── research/                    # 11 files → AI research tools
+│   │   ├── discovery_rag.ts         # Agentic RAG pipeline
+│   │   ├── graph_rag.ts             # Hybrid vector + graph retrieval
+│   │   ├── hypothesis_gen.ts        # Multi-model debate system
+│   │   ├── llm_router.ts            # Multi-LLM routing
+│   │   ├── memory_bridge.ts         # Cross-modal memory bridge
+│   │   ├── quality_gate.ts          # Quality regression tracking
+│   │   ├── security_scanner.ts      # 100+ pattern scanner
+│   │   ├── self_evolution.ts        # RLM 2.0 feedback loops
+│   │   ├── sentinel.ts              # Self-healing diagnostics
+│   │   ├── stress_test.ts           # Chaos/fuzz testing
+│   │   └── synthesis_engine.ts      # Knowledge-to-training pipeline
+│   ├── sentry/                      # 5 files → already merged into 'sentry' cluster
+│   └── swarm/                       # 8 files → already merged into 'swarm' cluster
+├── mcp-protocol/                    # 15 files → MCP protocol extensions
+│   ├── a2a-protocol.ts              # Agent-to-Agent communication
+│   ├── agent-graphs.ts              # Hierarchical agent DAGs
+│   ├── agentic-sampling-v2.ts       # Server-side agent loops
+│   ├── dynamic-indexing.ts          # Real-time indexing pipeline
+│   ├── elicitation.ts               # AI-driven input requests
+│   ├── gateway.ts                   # Security/audit gateway
+│   ├── mcp-apps.ts                  # Interactive UI dashboards
+│   ├── mcp-tasks.ts                 # Async task management
+│   ├── multimodal-embeddings.ts     # Cross-modal vector search
+│   ├── oauth.ts                     # OAuth 2.1 authorization
+│   ├── session-manager.ts           # Session resumability
+│   ├── structured-output.ts         # JSON output formatting
+│   ├── tool-search.ts               # Tool discovery via NLP
+│   └── zero-trust.ts               # Agent identity management
+├── security/                        # 4 files → shared security infrastructure
+│   ├── prompt-injection-detector.ts # Injection detection
+│   ├── rate-limiter.ts              # Per-endpoint rate limits
+│   ├── audit-logger.ts              # Structured audit logging
+│   └── circuit-breaker.ts           # Failing endpoint protection
+├── swarm/                           # 18 files → 10-agent swarm orchestration
+├── db/                              # 4 files → database infrastructure
+│   ├── vector-store.ts              # ChromaDB integration
+│   ├── sqlite-manager.ts            # SQLite connection pool
+│   └── ...
+├── resources/                       # 3 files → MCP resources
+├── prompts/                         # 1 file → MCP prompt templates
+└── seed/                            # 4 files → built-in knowledge libraries
+    ├── polyalgo.ts                  # 160+ algorithms
+    ├── easy-prompts.ts              # 150+ prompt templates
+    └── bug-taxonomy.ts              # 17 categories, 400+ keywords
+```
 
 ---
 
-## 6. Directory Structure
+## 3. Design Patterns
 
-```
-VegaMCP/
-â”œâ”€â”€ docs/
-â”‚   â”œâ”€â”€ ARCHITECTURE.md          # This document
-â”‚   â”œâ”€â”€ MEMORY_MODULE.md         # Memory module specification
-â”‚   â”œâ”€â”€ BROWSER_MODULE.md        # Browser module specification
-â”‚   â”œâ”€â”€ SENTRY_MODULE.md         # Sentry module specification
-â”‚   â”œâ”€â”€ REASONING_MODULE.md      # Reasoning module specification
-â”‚   â”œâ”€â”€ SECURITY.md              # Security specification
-â”‚   â””â”€â”€ SETUP.md                 # Setup and configuration guide
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ index.ts                 # Server entry point + tool router
-â”‚   â”œâ”€â”€ tools/
-â”‚   â”‚   â”œâ”€â”€ memory/
-â”‚   â”‚   â”‚   â”œâ”€â”€ create-entities.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ create-relations.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ add-observations.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ search-graph.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ open-nodes.ts
-â”‚   â”‚   â”‚   â””â”€â”€ delete-entities.ts
-â”‚   â”‚   â”œâ”€â”€ browser/
-â”‚   â”‚   â”‚   â”œâ”€â”€ navigate.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ click.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ type.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ screenshot.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ snapshot.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ execute-js.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ console-logs.ts
-â”‚   â”‚   â”‚   â””â”€â”€ close.ts
-â”‚   â”‚   â”œâ”€â”€ sentry/
-â”‚   â”‚   â”‚   â”œâ”€â”€ search-issues.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ get-issue-detail.ts
-â”‚   â”‚   â”‚   â”œâ”€â”€ get-breadcrumbs.ts
-â”‚   â”‚   â”‚   â””â”€â”€ resolve-issue.ts
-â”‚   â”‚   â””â”€â”€ reasoning/
-â”‚   â”‚       â””â”€â”€ route-to-model.ts
-â”‚   â”œâ”€â”€ resources/
-â”‚   â”‚   â”œâ”€â”€ memory-resources.ts
-â”‚   â”‚   â””â”€â”€ sentry-resources.ts
-â”‚   â”œâ”€â”€ prompts/
-â”‚   â”‚   â”œâ”€â”€ investigate-error.ts
-â”‚   â”‚   â””â”€â”€ architecture-review.ts
-â”‚   â”œâ”€â”€ security/
-â”‚   â”‚   â”œâ”€â”€ path-guard.ts
-â”‚   â”‚   â”œâ”€â”€ rate-limiter.ts
-â”‚   â”‚   â””â”€â”€ input-validator.ts
-â”‚   â””â”€â”€ db/
-â”‚       â””â”€â”€ graph-store.ts
-â”œâ”€â”€ data/                        # Runtime data (gitignored)
-â”œâ”€â”€ .env.example
-â”œâ”€â”€ .gitignore
-â”œâ”€â”€ package.json
-â””â”€â”€ tsconfig.json
-```
+### 3.1 Unified Action Schema
 
----
+Every tool in v7 follows the same dispatch pattern:
 
-## 7. Antigravity Integration
-
-### 7.1 MCP Configuration
-
-Add to your Antigravity `mcp_config.json`:
-
-```json
+```typescript
+// Every tool: { action: string, ...params }
+// Dispatch: tool_name → action → handler function
 {
-  "mcpServers": {
-    "vegamcp": {
-      "command": "node",
-      "args": ["/path/to/VegaMCP/build/index.js"],
-      "env": {
-        "NODE_ENV": "production"
-      }
-    }
+  name: 'web_testing',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: { enum: ['lighthouse', 'visual_regression', 'responsive_test', ...] },
+      url: { type: 'string' },
+      // ... action-specific params
+    },
+    required: ['action']
   }
 }
 ```
 
-### 7.2 Environment Variables
+### 3.2 Progressive Disclosure (3-Level)
 
-All secrets are stored in `.env` at the project root:
+```
+Level 1 (Always):  Tool name + 1-line summary      (~20 tokens each)
+Level 2 (Smart):   Expanded description + keywords  (~100 tokens each, top 3 only)
+Level 3 (On-call): Full action schemas               (~150 tokens, per request)
+```
 
-```env
-SENTRY_AUTH_TOKEN=your_sentry_token
-SENTRY_ORG=your_org_slug
-SENTRY_PROJECT=your_project_slug
-DEEPSEEK_API_KEY=your_deepseek_key
-OPENROUTER_API_KEY=your_openrouter_key
-WORKSPACE_ROOT=/path/to/VegaMCP
+### 3.3 AI-First Output Pattern (Testing Tools)
+
+All testing tools return structured JSON with an `ai_analysis` block:
+
+```typescript
+{
+  // Raw data
+  lighthouse: { performance: 72, accessibility: 95, seo: 88 },
+  // AI-actionable analysis
+  ai_analysis: {
+    verdict: 'needs_improvement',
+    worst_category: 'performance',
+    top_opportunities: [...],
+    hint: 'Focus on performance — score 72 is below target 90.'
+  }
+}
+```
+
+### 3.4 Backward Compatibility via Aliases
+
+```typescript
+// Old v6 call: vegamcp_web_search({ query: 'test' })
+// Auto-aliased to: web({ action: 'search', query: 'test' })
+const ALIASES = {
+  vegamcp_web_search: { tool: 'web', action: 'search' },
+  vegamcp_browser: { tool: 'web', action: 'browse' },
+  vegamcp_sandbox_execute: { tool: 'code', action: 'execute' },
+  // ... 60+ aliases
+};
 ```
 
 ---
 
-## 8. Build & Run
+## 4. Technology Stack
 
-```bash
-# Install dependencies
-npm install
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Runtime | Node.js ≥ 20.0 | Server runtime |
+| Language | TypeScript 5.7+ | Type safety |
+| MCP SDK | @modelcontextprotocol/sdk 1.12+ | Protocol implementation |
+| Browser | Playwright 1.50+ | Browser automation, web testing |
+| Database | sql.js (SQLite) | Local data storage |
+| Vectors | ChromaDB (in-process) | Semantic search |
+| Schema | Zod 3.24+ | Runtime validation |
+| Environment | dotenv 16.6+ | Configuration |
+| Build | tsc (TypeScript compiler) | Compilation |
+| Dev | tsx (watch mode) | Development server |
 
-# Build TypeScript
-npm run build
+---
 
-# Run server (stdio mode â€” called by Antigravity)
-npm start
+## 5. Request Lifecycle
 
-# Development mode with hot reload
-npm run dev
 ```
+1. Client sends CallToolRequest via stdio/SSE
+   ↓
+2. Gateway Layer
+   ├── Prompt injection detection
+   ├── Rate limiting (per-endpoint)
+   ├── API key validation (if OAuth enabled)
+   └── Audit logging
+   ↓
+3. Dispatch Router
+   ├── Resolve tool name (check aliases if v6 name)
+   ├── Extract action from params
+   ├── Route to cluster handler
+   └── Validate action-specific params
+   ↓
+4. Cluster Handler
+   ├── Execute action logic
+   ├── Interact with infrastructure (DB, browser, HTTP, etc.)
+   └── Format response (structured JSON with ai_analysis for testing)
+   ↓
+5. Response
+   ├── Analytics tracking (latency, token usage)
+   ├── Error wrapping (structured error objects)
+   └── Return MCP ToolResult
+```
+
+---
+
+## 6. Tool Profiles
+
+Tools are conditionally loaded based on the `VEGAMCP_TOOL_PROFILE` environment variable:
+
+| Profile | Tools Loaded | Use Case |
+|---------|-------------|----------|
+| `full` | All 15 clusters | Full-featured development |
+| `minimal` | memory, web, code, ai | Lightweight coding assistant |
+| `research` | memory, web, ai, data, security | Research and analysis |
+| `coding` | memory, web, code, ai, sentry | Pure development |
+| `ops` | ops, security, protocol, sentry | Infrastructure management |
+| `testing` | web_testing, api_testing, accessibility, mobile (via protocol) | QA focus |
+
+---
+
+## 7. The 15 Tool Clusters
+
+| # | Cluster | Actions | Source Files | Status |
+|---|---------|---------|-------------|--------|
+| 1 | `memory` | 6 | tools/memory/ | ✅ Merged in v6 |
+| 2 | `web` | 10 | tools/browser/ + capabilities/ | 🔄 Consolidating |
+| 3 | `code` | 7 | capabilities/ (7 files) | 🔄 Consolidating |
+| 4 | `ai` | 8 | reasoning/ + research/ | 🔄 Consolidating |
+| 5 | `swarm` | 9 | tools/swarm/ | ✅ Merged in v6 |
+| 6 | `data` | 5 | capabilities/ (3 files) | 🔄 Consolidating |
+| 7 | `ops` | 8 | capabilities/ (8 files) | 🔄 Consolidating |
+| 8 | `security` | 5 | research/ (4 files) | 🔄 Consolidating |
+| 9 | `create` | 3 | mcp-protocol/ + capabilities/ | 🔄 Consolidating |
+| 10 | `protocol` | 11 | mcp-protocol/ (12 files) + mobile | 🔄 Consolidating |
+| 11 | `sentry` | 4 | tools/sentry/ | ✅ Merged in v6 |
+| 12 | `intel` | 3 | capabilities/ (2 files) | 🔄 Consolidating |
+| 13 | `web_testing` | 10 | capabilities/web-testing.ts | 🔄 Phase 9 |
+| 14 | `api_testing` | 8 | capabilities/api-testing.ts | 🔄 Phase 10 |
+| 15 | `accessibility` | 6 | capabilities/accessibility-testing.ts | 🔄 Phase 11 |
+
+**Total: 100+ actions across 15 clusters**
+
+---
+
+## 8. Security Architecture
+
+```
+┌───────────────────────────────────────┐
+│          Security Layers              │
+├───────────────────────────────────────┤
+│ 1. Prompt Injection Detection         │  ← Blocks malicious prompts
+│ 2. Rate Limiting (per-endpoint)       │  ← Prevents abuse
+│ 3. OAuth 2.1 (optional)              │  ← API key management
+│ 4. Zero-Trust Agent Identity          │  ← Scoped permissions per agent
+│ 5. Gateway Audit Logging              │  ← Complete call history
+│ 6. Circuit Breaker                    │  ← Failing endpoint protection
+│ 7. Tool Profile Gating                │  ← Only load needed tools
+│ 8. WORKSPACE_ROOT Sandboxing          │  ← File system isolation
+└───────────────────────────────────────┘
+```
+
+---
+
+## 9. Cross-Agent Compatibility
+
+| Client | Transport | Tool Limit | Status |
+|--------|-----------|-----------|--------|
+| Claude Code | stdio | ~128 tools | ✅ Tested |
+| Kimi Code | stdio | ~50 tools | ✅ Tested |
+| Codex CLI | stdio | ~30 tools | ✅ Tested (15 tools fits all) |
+| Custom MCP | SSE | Unlimited | ✅ Supported |
+
+The v7 consolidation (60+ → 15 tools) ensures **every client can load the full tool set** without hitting limits.
+
+---
+
+## 10. Evolution History
+
+| Version | Tools | Architecture | Key Addition |
+|---------|-------|-------------|-------------|
+| v1.0 | ~20 | Hub-and-Spoke (4 modules) | Memory, Browser, Sentry, Reasoning |
+| v3.0 | ~35 | Multi-Module | Research tools, Code analysis |
+| v4.0 | ~45 | + Research Engine | Hypothesis gen, Self-evolution, Sentinel |
+| v5.0 | ~55 | + MCP Protocol Extensions | A2A, OAuth, Gateway, Sampling |
+| v6.0 | 60+ | + Capabilities Layer | Mobile testing, Zero-trust, MCP Apps |
+| **v7.0** | **15 clusters (100+ actions)** | **Unified Clusters** | **Web+API+A11y testing, Progressive Disclosure** |

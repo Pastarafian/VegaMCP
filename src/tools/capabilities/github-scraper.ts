@@ -8,6 +8,7 @@
 
 import { logAudit } from '../../db/graph-store.js';
 import { addToVectorStore, searchVectorStore } from '../../db/vector-store.js';
+import { getCircuitBreaker } from '../../security/circuit-breaker.js';
 
 // ═══════════════════════════════════════════════
 // CONFIGURATION
@@ -91,19 +92,23 @@ async function githubFetch(endpoint: string): Promise<{ data: any; error?: strin
     return { data: null, error: `GitHub rate limit exceeded. Resets in ${resetIn}s. Set GITHUB_TOKEN for 5000 req/hr.` };
   }
 
+  const breaker = getCircuitBreaker('github');
+
   try {
-    const response = await fetch(`${GITHUB_API}${endpoint}`, {
-      headers: getHeaders(),
+    return await breaker.execute(async () => {
+      const response = await fetch(`${GITHUB_API}${endpoint}`, {
+        headers: getHeaders(),
+      });
+
+      updateRateLimit(response);
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`GitHub API error ${response.status}: ${errText.slice(0, 300)}`);
+      }
+
+      return { data: await response.json() };
     });
-
-    updateRateLimit(response);
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      return { data: null, error: `GitHub API error ${response.status}: ${errText.slice(0, 300)}` };
-    }
-
-    return { data: await response.json() };
   } catch (err: any) {
     return { data: null, error: `Fetch failed: ${err.message}` };
   }
@@ -134,18 +139,22 @@ async function searchIssues(query: string, language?: string, perPage: number = 
 }
 
 async function fetchFile(owner: string, repo: string, filePath: string, branch: string = 'main'): Promise<{ content: string; error?: string }> {
+  const breaker = getCircuitBreaker('github');
+
   try {
-    const url = `${RAW_GITHUB}/${owner}/${repo}/${branch}/${filePath}`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'VegaMCP/3.0' },
+    return await breaker.execute(async () => {
+      const url = `${RAW_GITHUB}/${owner}/${repo}/${branch}/${filePath}`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'VegaMCP/3.0' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status}`);
+      }
+
+      const content = await response.text();
+      return { content: content.slice(0, 50000) };
     });
-
-    if (!response.ok) {
-      return { content: '', error: `Failed to fetch file: ${response.status}` };
-    }
-
-    const content = await response.text();
-    return { content: content.slice(0, 50000) }; // Limit to 50KB
   } catch (err: any) {
     return { content: '', error: `Fetch failed: ${err.message}` };
   }
