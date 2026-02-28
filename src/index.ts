@@ -163,6 +163,7 @@ import { withResourceLinks, autoDetectLinks, entityLink } from './mcp-protocol/r
 import { mcpTasksSchema, handleMCPTasks, runAsync } from './mcp-protocol/mcp-tasks.js';
 import { oauthSchema, handleOAuth, getProtectedResourceMetadata } from './mcp-protocol/oauth.js';
 import { gatewaySchema, handleGateway, recordAudit, detectPromptInjection, checkRateLimit } from './mcp-protocol/gateway.js';
+import { getV7Tools } from './mcp-protocol/v7-unified.js';
 import { sessionSchema, handleSession } from './mcp-protocol/session-manager.js';
 import { a2aProtocolSchema, handleA2AProtocol } from './mcp-protocol/a2a-protocol.js';
 import { toolSearchSchema, handleToolSearch, registerAllSearchableTools } from './mcp-protocol/tool-search.js';
@@ -500,7 +501,7 @@ async function handleAgentOpsDispatch(args: any): Promise<any> {
 // Tool Registry (Consolidated)
 // ============================================================
 
-function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promise<any> }> {
+export function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promise<any> }> {
   const tools: Array<{ schema: any; handler: (args: any) => Promise<any> }> = [];
   const profile = getToolProfile();
 
@@ -651,7 +652,7 @@ function getAvailableTools(): Array<{ schema: any; handler: (args: any) => Promi
 
 // List available tools (with MCP 2025 annotations)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = getAvailableTools();
+  const tools = getV7Tools();
   return {
     tools: tools.map(t => {
       const annotations = TOOL_ANNOTATIONS[t.schema.name];
@@ -668,8 +669,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Call a tool — with analytics tracking + gateway audit + prompt injection detection
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const tools = getAvailableTools();
-  const tool = tools.find(t => t.schema.name === name);
+  const tools = getV7Tools();
+  const tool = tools.find((t: any) => t.schema.name === name);
 
   if (!tool) {
     recordToolCall(name, 0, false, 'TOOL_NOT_FOUND');
