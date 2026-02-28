@@ -115,6 +115,7 @@ import { mobileTestingSchema, handleMobileTesting } from './tools/capabilities/m
 import { webTestingSchema, handleWebTesting } from './tools/capabilities/web-testing.js';
 import { apiTestingSchema, handleApiTesting } from './tools/capabilities/api-testing.js';
 import { accessibilitySchema, handleAccessibility } from './tools/capabilities/accessibility-testing.js';
+import { designToolkitSchema, handleDesignToolkit } from './tools/capabilities/design-toolkit.js';
 
 // --- v3.2 Seed Data (PolyAlgo, EasyPrompts, BugTaxonomy) ---
 import { seedDataSchema, handleSeedData, autoSeed } from './seed/seed-runner.js';
@@ -269,6 +270,7 @@ const TOOL_ANNOTATIONS: Record<string, {
   web_testing: { title: 'Web Testing Suite', readOnlyHint: true, openWorldHint: true },
   api_testing: { title: 'API Testing Suite', readOnlyHint: true, openWorldHint: true },
   accessibility: { title: 'Accessibility Testing', readOnlyHint: true, openWorldHint: true },
+  design_toolkit: { title: 'Design Toolkit & Converter', readOnlyHint: true, openWorldHint: true },
 };
 
 // ============================================================
@@ -593,6 +595,13 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: webTestingSchema, handler: handleWebTesting });
     tools.push({ schema: apiTestingSchema, handler: handleApiTesting });
     tools.push({ schema: accessibilitySchema, handler: handleAccessibility });
+  }
+
+  // ═══════════════════════════════════════════
+  // DESIGN & CONVERSION
+  // ═══════════════════════════════════════════
+  if (profile === 'full' || profile === 'coding') {
+    tools.push({ schema: designToolkitSchema, handler: handleDesignToolkit });
   }
 
   // ═══════════════════════════════════════════

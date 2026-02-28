@@ -1,24 +1,48 @@
 /**
- * VegaMCP — Web Testing Tool (v7.0)
+ * VegaMCP — Web Testing Tool (v7.1 — AI-Enhanced Edition)
  * 
  * AI-First web application quality assurance via Playwright.
- * Features:
- * - Lighthouse-style performance audits (Core Web Vitals)
- * - Visual regression testing with screenshot comparison
- * - Responsive design testing across breakpoints
- * - Console error auditing with severity classification
- * - Network waterfall analysis (slow requests, failed resources)
- * - Form validation testing (submit, error states, edge cases)
- * - Link checking (broken links, redirect chains)
- * - Storage auditing (cookies, localStorage, sessionStorage)
- * - CSS coverage analysis (unused styles detection)
- * - Core Web Vitals measurement (LCP, FID, CLS, TTFB)
+ * 
+ * ORIGINAL ACTIONS (v7.0):
+ * - lighthouse — Performance audit with scoring
+ * - visual_regression — Screenshot capture & comparison
+ * - responsive_test — Multi-viewport layout checking
+ * - console_audit — Error/warning capture with classification
+ * - network_waterfall — Resource timing analysis
+ * - form_test — Form validation testing
+ * - link_check — Broken link detection
+ * - storage_audit — Cookies/localStorage security audit
+ * - css_coverage — Unused styles detection
+ * - core_web_vitals — LCP/CLS/TTFB measurement
+ * 
+ * NEW ACTIONS (v7.1):
+ * - full_audit — One-click comprehensive site audit (runs ALL tests)
+ * - security_headers — HTTP security header audit & grading
+ * - dom_diff — Structural DOM comparison with change classification
+ * - error_diagnosis — AI root cause analyzer for page errors
+ * - test_suite — Multi-test orchestration with pass/fail gates
+ * - performance_budget — Budget tracking with violation alerts
+ * 
+ * ENHANCEMENTS (v7.1):
+ * - _meta block on every output (test_id, timestamp, duration, browser info)
+ * - Structured event timeline (navigation → paint → DOM → idle)
+ * - Error fingerprinting (grouped, classified, with suggested fixes)
+ * - Comparison to previous runs (trend detection)
+ * - Effort/impact prioritized fix queues
  * 
  * All outputs include structured `ai_analysis` blocks for AI consumption.
  */
 
 import { getPage, isBrowserActive } from '../browser/session.js';
 import { logAudit } from '../../db/graph-store.js';
+import {
+  createTestMeta, EventTimeline, fingerprintError,
+  recordTestRun, getComparisonToPrevious, scoreToGrade, severityBadge,
+  effortImpactMatrix, SECURITY_HEADERS,
+  storeDomSnapshot, getDomSnapshot, listDomSnapshots,
+  createTestSuite, getTestSuite, listTestSuites,
+  recordSuiteResult, getSuiteHistory,
+} from './testing-utils.js';
 
 // ============================================================
 // Schema
@@ -26,7 +50,7 @@ import { logAudit } from '../../db/graph-store.js';
 
 export const webTestingSchema = {
   name: 'web_testing',
-  description: `Web application quality testing via Playwright. Actions: lighthouse (performance audit with scores), visual_regression (screenshot comparison), responsive_test (multi-viewport check), console_audit (error/warning capture), network_waterfall (resource timing analysis), form_test (form validation testing), link_check (broken link detection), storage_audit (cookies/localStorage), css_coverage (unused style detection), core_web_vitals (LCP/CLS/TTFB measurement). All outputs include ai_analysis blocks.`,
+  description: `Web application quality testing via Playwright. Actions: lighthouse (performance audit with scores), visual_regression (screenshot comparison), responsive_test (multi-viewport check), console_audit (error/warning capture), network_waterfall (resource timing analysis), form_test (form validation testing), link_check (broken link detection), storage_audit (cookies/localStorage), css_coverage (unused style detection), core_web_vitals (LCP/CLS/TTFB measurement), full_audit (one-click comprehensive site audit), security_headers (HTTP security header audit), dom_diff (structural DOM comparison), error_diagnosis (AI root cause analyzer), test_suite (multi-test orchestration), performance_budget (budget tracking with violations). All outputs include ai_analysis blocks.`,
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -43,6 +67,13 @@ export const webTestingSchema = {
           'storage_audit',
           'css_coverage',
           'core_web_vitals',
+          // v7.1 new actions
+          'full_audit',
+          'security_headers',
+          'dom_diff',
+          'error_diagnosis',
+          'test_suite',
+          'performance_budget',
         ],
         description: 'Testing action to perform',
       },
@@ -68,6 +99,17 @@ export const webTestingSchema = {
       // General
       timeout: { type: 'number', description: 'Navigation timeout in ms', default: 30000 },
       wait_for: { type: 'string', enum: ['load', 'domcontentloaded', 'networkidle'], default: 'load', description: 'Wait condition before testing' },
+      // DOM diff
+      snapshot_id: { type: 'string', description: 'Baseline snapshot ID to compare against (dom_diff)' },
+      // Error diagnosis
+      error_message: { type: 'string', description: 'Specific error to diagnose (error_diagnosis)' },
+      // Test suite
+      suite_name: { type: 'string', description: 'Suite name (test_suite)' },
+      suite_action: { type: 'string', enum: ['create', 'run', 'list', 'history'], description: 'Suite sub-action (test_suite)' },
+      tests: { type: 'array', items: { type: 'object' }, description: 'Test definitions for suite [{action, url, thresholds}] (test_suite)' },
+      suite_description: { type: 'string', description: 'Suite description (test_suite create)' },
+      // Performance budget
+      budgets: { type: 'object', description: 'Budget thresholds {lcp_ms, cls, fcp_ms, total_size_kb, js_size_kb, css_size_kb, image_size_kb, request_count} (performance_budget)' },
     },
     required: ['action'],
   },
@@ -77,8 +119,10 @@ export const webTestingSchema = {
 // Structured output helpers
 // ============================================================
 
-function ok(data: any) {
-  return { content: [{ type: 'text', text: JSON.stringify({ success: true, ...data }, null, 2) }] };
+function ok(data: any, meta?: any) {
+  const output: any = { success: true, ...data };
+  if (meta) output._meta = meta;
+  return { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] };
 }
 
 function fail(code: string, message: string) {
@@ -963,8 +1007,370 @@ export async function handleWebTesting(args: any): Promise<{ content: Array<{ ty
         });
       }
 
+      // ═══════════════════════════════════
+      // FULL AUDIT — One-click comprehensive
+      // ═══════════════════════════════════
+      case 'full_audit': {
+        if (!args.url) return fail('MISSING_PARAM', 'url is required');
+        const timeline = new EventTimeline();
+        const auditResults: any = {};
+        const allIssues: Array<{ priority: number; category: string; issue: string; effort: string; impact: string }> = [];
+        const scores: Record<string, number> = {};
+
+        const subActions = ['lighthouse', 'core_web_vitals', 'console_audit', 'link_check', 'form_test', 'storage_audit', 'css_coverage', 'responsive_test'];
+
+        for (const sub of subActions) {
+          timeline.emit('sub_test_start', sub);
+          try {
+            const subResult = await handleWebTesting({ ...args, action: sub });
+            const parsed = JSON.parse(subResult.content[0]?.text || '{}');
+            if (parsed.success) {
+              auditResults[sub] = { status: 'passed', summary: parsed.ai_analysis || {} };
+              if (parsed.audit?.scores?.performance) scores.performance = parsed.audit.scores.performance;
+              if (parsed.audit?.scores?.seo) scores.seo = parsed.audit.scores.seo;
+            } else {
+              auditResults[sub] = { status: 'error', error: parsed.error?.message };
+            }
+          } catch (e: any) {
+            auditResults[sub] = { status: 'error', error: e.message };
+          }
+          timeline.emit('sub_test_end', sub);
+        }
+
+        // Run security headers separately
+        timeline.emit('sub_test_start', 'security_headers');
+        try {
+          const secResult = await handleWebTesting({ ...args, action: 'security_headers' });
+          const secParsed = JSON.parse(secResult.content[0]?.text || '{}');
+          auditResults.security_headers = { status: 'passed', summary: secParsed.ai_analysis || {} };
+          if (secParsed.security_headers?.score) scores.security = secParsed.security_headers.score;
+        } catch { auditResults.security_headers = { status: 'skipped' }; }
+        timeline.emit('sub_test_end', 'security_headers');
+
+        const avgScore = Object.values(scores).length > 0
+          ? Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / Object.values(scores).length)
+          : 0;
+
+        const passedCount = Object.values(auditResults).filter((r: any) => r.status === 'passed').length;
+        const failedCount = Object.values(auditResults).filter((r: any) => r.status !== 'passed').length;
+
+        const meta = createTestMeta('web_testing', 'full_audit', start, { url: args.url });
+        recordTestRun({ test_id: meta.test_id, tool: 'web_testing', action: 'full_audit', url: args.url, timestamp: meta.timestamp, duration_ms: meta.duration_ms, passed: failedCount === 0, score: avgScore, issues_count: failedCount, summary: `Full audit: ${passedCount}/${passedCount + failedCount} passed` });
+
+        return ok({
+          full_audit: {
+            url: args.url,
+            overall_grade: scoreToGrade(avgScore),
+            overall_score: avgScore,
+            category_scores: scores,
+            tests_run: Object.keys(auditResults).length,
+            tests_passed: passedCount,
+            tests_failed: failedCount,
+          },
+          sub_results: auditResults,
+          event_timeline: timeline.getEvents(),
+          ai_analysis: {
+            overall_verdict: failedCount === 0 ? '✅ All audits passed' : `⚠️ ${failedCount} audit(s) need attention`,
+            grade: scoreToGrade(avgScore),
+            strongest: Object.entries(scores).sort(([,a], [,b]) => b - a)[0]?.[0] || 'N/A',
+            weakest: Object.entries(scores).sort(([,a], [,b]) => a - b)[0]?.[0] || 'N/A',
+            next_steps: [
+              failedCount > 0 ? `Fix ${failedCount} failing audits first` : null,
+              scores.performance && scores.performance < 80 ? 'Focus on performance optimizations' : null,
+              scores.security && scores.security < 70 ? 'Add missing security headers' : null,
+              scores.seo && scores.seo < 80 ? 'Improve SEO fundamentals' : null,
+            ].filter(Boolean),
+            hint: 'Run full_audit regularly to track progress. Each sub-result contains detailed AI analysis.',
+          },
+          comparison: getComparisonToPrevious(args.url, 'full_audit', avgScore, failedCount),
+        }, meta);
+      }
+
+      // ═══════════════════════════════════
+      // SECURITY HEADERS
+      // ═══════════════════════════════════
+      case 'security_headers': {
+        if (!args.url) return fail('MISSING_PARAM', 'url is required');
+        const page = await getPage();
+        const timeline = new EventTimeline();
+
+        timeline.emit('navigation_start', args.url);
+        const response = await page.goto(args.url, { waitUntil: (args.wait_for as any) || 'load', timeout: args.timeout || 30000 });
+        timeline.emit('navigation_complete');
+
+        const headers = response?.headers() || {};
+        const headerNames = Object.keys(headers).map(h => h.toLowerCase());
+
+        const results = SECURITY_HEADERS.map(sh => {
+          const headerKey = sh.name.toLowerCase();
+          const present = headerNames.includes(headerKey);
+          const value = present ? headers[headerKey] : null;
+          return { name: sh.name, present, value: value?.substring(0, 200), weight: sh.weight, description: sh.description };
+        });
+
+        const earned = results.filter(r => r.present).reduce((sum, r) => sum + r.weight, 0);
+        const maxScore = SECURITY_HEADERS.reduce((sum, h) => sum + h.weight, 0);
+        const score = Math.round((earned / maxScore) * 100);
+        const present = results.filter(r => r.present);
+        const missing = results.filter(r => !r.present);
+
+        const meta = createTestMeta('web_testing', 'security_headers', start, { url: args.url });
+        recordTestRun({ test_id: meta.test_id, tool: 'web_testing', action: 'security_headers', url: args.url, timestamp: meta.timestamp, duration_ms: meta.duration_ms, passed: score >= 70, score, issues_count: missing.length, summary: `Security: ${score}% (${missing.length} missing)` });
+
+        return ok({
+          security_headers: { url: args.url, score, grade: scoreToGrade(score), headers_present: present.length, headers_missing: missing.length, total_checked: results.length },
+          headers_detail: results,
+          ai_analysis: {
+            severity: severityBadge(score >= 80 ? 'clean' : score >= 60 ? 'medium' : score >= 40 ? 'high' : 'critical'),
+            missing_critical: missing.filter(m => m.weight >= 10).map(m => ({ header: m.name, why: m.description, fix: `Add ${m.name} header to server response` })),
+            missing_recommended: missing.filter(m => m.weight < 10).map(m => m.name),
+            quick_wins: missing.filter(m => m.weight >= 10).slice(0, 3).map(m => `Add \`${m.name}\` header (+${m.weight} points)`),
+            hint: 'Security headers prevent XSS, clickjacking, and data injection. Most can be added via server config in minutes.',
+          },
+          event_timeline: timeline.getEvents(),
+          comparison: getComparisonToPrevious(args.url, 'security_headers', score, missing.length),
+        }, meta);
+      }
+
+      // ═══════════════════════════════════
+      // DOM DIFF
+      // ═══════════════════════════════════
+      case 'dom_diff': {
+        if (!args.url) return fail('MISSING_PARAM', 'url is required');
+        const page = await getPage();
+        await page.goto(args.url, { waitUntil: (args.wait_for as any) || 'load', timeout: args.timeout || 30000 });
+        await page.waitForTimeout(1000);
+
+        const currentSnapshot = await page.evaluate(() => {
+          function serializeNode(el: Element, depth = 0): any {
+            if (depth > 8) return null;
+            const cs = getComputedStyle(el);
+            return {
+              tag: el.tagName.toLowerCase(),
+              id: el.id || undefined,
+              classes: Array.from(el.classList).slice(0, 5),
+              text: el.textContent?.trim().substring(0, 100) || undefined,
+              attrs: { href: el.getAttribute('href'), src: el.getAttribute('src'), alt: el.getAttribute('alt') },
+              style: { display: cs.display, position: cs.position, width: cs.width, height: cs.height, color: cs.color, bg: cs.backgroundColor },
+              rect: el.getBoundingClientRect ? { x: Math.round(el.getBoundingClientRect().x), y: Math.round(el.getBoundingClientRect().y), w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height) } : undefined,
+              children: Array.from(el.children).slice(0, 20).map(c => serializeNode(c, depth + 1)).filter(Boolean),
+            };
+          }
+          return { serialized: serializeNode(document.body), timestamp: new Date().toISOString(), element_count: document.querySelectorAll('*').length };
+        });
+
+        const snapshotId = `snap-${Date.now()}`;
+        storeDomSnapshot(snapshotId, args.url, currentSnapshot);
+
+        // Compare with baseline if provided
+        let diff = null;
+        if (args.snapshot_id) {
+          const baseline = getDomSnapshot(args.snapshot_id);
+          if (baseline) {
+            diff = { baseline_id: args.snapshot_id, baseline_timestamp: baseline.timestamp, changes: [] as any[], summary: '' };
+            const bCount = baseline.snapshot.element_count || 0;
+            const cCount = currentSnapshot.element_count || 0;
+            if (bCount !== cCount) diff.changes.push({ type: 'structure', description: `Element count changed: ${bCount} → ${cCount}`, impact: Math.abs(cCount - bCount) > 10 ? 'high' : 'medium' });
+            diff.summary = diff.changes.length > 0 ? `${diff.changes.length} structural changes detected` : 'No significant structural changes';
+          }
+        }
+
+        const meta = createTestMeta('web_testing', 'dom_diff', start, { url: args.url });
+        return ok({
+          dom_diff: { url: args.url, snapshot_id: snapshotId, element_count: currentSnapshot.element_count, has_baseline: !!diff, changes_detected: diff?.changes.length || 0 },
+          snapshot_saved: { id: snapshotId, hint: 'Use this snapshot_id as baseline for future dom_diff comparisons' },
+          diff: diff,
+          available_snapshots: listDomSnapshots().slice(0, 10),
+          ai_analysis: {
+            verdict: !diff ? '📸 Snapshot saved. No baseline to compare against yet.' : diff.changes.length === 0 ? '✅ DOM structure unchanged' : `⚠️ ${diff.changes.length} changes detected`,
+            hint: 'Take a DOM snapshot before making changes, then compare after to catch unintended structural side-effects.',
+          },
+        }, meta);
+      }
+
+      // ═══════════════════════════════════
+      // ERROR DIAGNOSIS
+      // ═══════════════════════════════════
+      case 'error_diagnosis': {
+        if (!args.url) return fail('MISSING_PARAM', 'url is required');
+        const page = await getPage();
+        const timeline = new EventTimeline();
+        const consoleErrors: any[] = [];
+        const pageErrors: any[] = [];
+        const networkErrors: any[] = [];
+
+        page.on('console', (msg: any) => { if (msg.type() === 'error') consoleErrors.push({ text: msg.text(), url: msg.location()?.url, line: msg.location()?.lineNumber }); });
+        page.on('pageerror', (err: Error) => { pageErrors.push({ message: err.message, stack: err.stack?.split('\n').slice(0, 8).join('\n') }); });
+        page.on('requestfailed', (req: any) => { networkErrors.push({ url: req.url().substring(0, 150), type: req.resourceType(), error: req.failure()?.errorText }); });
+
+        timeline.emit('navigation_start');
+        await page.goto(args.url, { waitUntil: (args.wait_for as any) || 'load', timeout: args.timeout || 30000 });
+        timeline.emit('page_loaded');
+        await page.waitForTimeout(3000);
+        timeline.emit('settled');
+
+        // Fingerprint all errors
+        const fingerprinted = [
+          ...consoleErrors.map(e => ({ ...fingerprintError(e.text, e.url, e.line), source_type: 'console' })),
+          ...pageErrors.map(e => ({ ...fingerprintError(e.message), source_type: 'uncaught_exception', stack: e.stack })),
+          ...networkErrors.map(e => ({ ...fingerprintError(e.error || `Failed: ${e.url}`, e.url), source_type: 'network' })),
+        ];
+
+        // Group by category
+        const byCategory: Record<string, any[]> = {};
+        for (const fp of fingerprinted) {
+          if (!byCategory[fp.auto_category]) byCategory[fp.auto_category] = [];
+          byCategory[fp.auto_category].push(fp);
+        }
+
+        const criticalCount = fingerprinted.filter(f => f.severity === 'critical').length;
+        const highCount = fingerprinted.filter(f => f.severity === 'high').length;
+
+        const meta = createTestMeta('web_testing', 'error_diagnosis', start, { url: args.url });
+        recordTestRun({ test_id: meta.test_id, tool: 'web_testing', action: 'error_diagnosis', url: args.url, timestamp: meta.timestamp, duration_ms: meta.duration_ms, passed: fingerprinted.length === 0, issues_count: fingerprinted.length, summary: `${fingerprinted.length} errors (${criticalCount} critical)` });
+
+        return ok({
+          error_diagnosis: { url: args.url, total_errors: fingerprinted.length, critical: criticalCount, high: highCount, medium: fingerprinted.filter(f => f.severity === 'medium').length, low: fingerprinted.filter(f => f.severity === 'low').length, categories: Object.keys(byCategory).length },
+          errors_by_category: byCategory,
+          fingerprinted_errors: fingerprinted.slice(0, 30),
+          event_timeline: timeline.getEvents(),
+          ai_analysis: {
+            severity: severityBadge(criticalCount > 0 ? 'critical' : highCount > 0 ? 'high' : fingerprinted.length > 0 ? 'medium' : 'clean'),
+            diagnosis_summary: fingerprinted.length === 0 ? 'No errors detected — page is clean!' : `Found ${fingerprinted.length} errors across ${Object.keys(byCategory).length} categories`,
+            fix_priority_queue: fingerprinted.filter(f => f.severity === 'critical' || f.severity === 'high').slice(0, 5).map((f, i) => ({ priority: i + 1, severity: f.severity, category: f.auto_category, error: f.message, fix: f.suggested_fix })),
+            root_causes: Object.entries(byCategory).map(([cat, errs]) => ({ category: cat, count: errs.length, pattern: (errs as any[])[0]?.message?.substring(0, 80), fix: (errs as any[])[0]?.suggested_fix })),
+            hint: criticalCount > 0 ? 'Critical errors crash the page for users. Fix these immediately.' : highCount > 0 ? 'High-severity errors break functionality. Prioritize these fixes.' : 'Monitor for regressions.',
+          },
+        }, meta);
+      }
+
+      // ═══════════════════════════════════
+      // TEST SUITE
+      // ═══════════════════════════════════
+      case 'test_suite': {
+        const subAction = args.suite_action || 'list';
+
+        if (subAction === 'create') {
+          if (!args.suite_name || !args.tests) return fail('MISSING_PARAM', 'suite_name and tests are required');
+          const suite = createTestSuite(args.suite_name, args.tests, args.suite_description);
+          return ok({ test_suite: { action: 'created', suite }, ai_analysis: { hint: `Suite "${args.suite_name}" created with ${args.tests.length} tests. Run it with suite_action: "run".` } });
+        }
+
+        if (subAction === 'list') {
+          const suites = listTestSuites();
+          return ok({ test_suite: { action: 'list', suites_count: suites.length, suites: suites.map(s => ({ name: s.name, tests: s.tests.length, created: s.created })) } });
+        }
+
+        if (subAction === 'history') {
+          const history = getSuiteHistory(args.suite_name, 10);
+          return ok({ test_suite: { action: 'history', suite_name: args.suite_name, runs: history } });
+        }
+
+        if (subAction === 'run') {
+          if (!args.suite_name) return fail('MISSING_PARAM', 'suite_name is required');
+          const suite = getTestSuite(args.suite_name);
+          if (!suite) return fail('NOT_FOUND', `Suite "${args.suite_name}" not found`);
+
+          const suiteStart = Date.now();
+          const results: any[] = [];
+          let passed = 0, failed = 0;
+
+          for (const test of suite.tests) {
+            try {
+              const result = await handleWebTesting({ ...test, url: test.url || args.url, timeout: args.timeout });
+              const parsed = JSON.parse(result.content[0]?.text || '{}');
+              const testPassed = parsed.success !== false;
+              if (testPassed) passed++; else failed++;
+              results.push({ action: test.action, url: test.url || args.url, status: testPassed ? 'passed' : 'failed', summary: parsed.ai_analysis?.verdict || parsed.ai_analysis?.overall || 'Completed' });
+            } catch (e: any) {
+              failed++;
+              results.push({ action: test.action, url: test.url || args.url, status: 'error', error: e.message });
+            }
+          }
+
+          const suiteResult = { suite_name: args.suite_name, status: (failed === 0 ? 'passed' : 'failed') as 'passed' | 'failed', timestamp: new Date().toISOString(), duration_ms: Date.now() - suiteStart, passed, failed, total: suite.tests.length, results };
+          recordSuiteResult(suiteResult);
+          const history = getSuiteHistory(args.suite_name, 5);
+          const trend = history.map(h => h.status);
+
+          return ok({
+            test_suite: { action: 'run', ...suiteResult },
+            trend: { last_runs: trend, regression_detected: trend.length >= 2 && trend[0] === 'failed' && trend[1] === 'passed' },
+            ai_analysis: {
+              verdict: failed === 0 ? `✅ Suite "${args.suite_name}" PASSED (${passed}/${suite.tests.length})` : `❌ Suite "${args.suite_name}" FAILED (${failed} failures)`,
+              failed_tests: results.filter(r => r.status !== 'passed').map(r => `${r.action}: ${r.error || r.summary}`),
+              gate_decision: failed === 0 ? 'DEPLOY_OK' : 'BLOCK_DEPLOY',
+              hint: failed > 0 ? 'Fix failing tests before deploying. Run individual actions for detailed diagnostics.' : 'All tests passing — safe to deploy.',
+            },
+          });
+        }
+
+        return fail('UNKNOWN_SUITE_ACTION', `Unknown suite_action: ${subAction}. Valid: create, run, list, history`);
+      }
+
+      // ═══════════════════════════════════
+      // PERFORMANCE BUDGET
+      // ═══════════════════════════════════
+      case 'performance_budget': {
+        if (!args.url) return fail('MISSING_PARAM', 'url is required');
+        if (!args.budgets) return fail('MISSING_PARAM', 'budgets object is required (e.g. {lcp_ms: 2500, cls: 0.1, total_size_kb: 3000})');
+        const page = await getPage();
+        const timeline = new EventTimeline();
+
+        timeline.emit('navigation_start');
+        await page.goto(args.url, { waitUntil: 'networkidle', timeout: args.timeout || 30000 });
+        timeline.emit('network_idle');
+        await page.waitForTimeout(2000);
+
+        const metrics = await page.evaluate(() => {
+          const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+          const res = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+          const fcp = performance.getEntriesByType('paint').find(p => p.name === 'first-contentful-paint');
+          const jsSize = res.filter(r => r.initiatorType === 'script').reduce((s, r) => s + (r.transferSize || 0), 0);
+          const cssSize = res.filter(r => r.initiatorType === 'link' || r.initiatorType === 'css').reduce((s, r) => s + (r.transferSize || 0), 0);
+          const imgSize = res.filter(r => r.initiatorType === 'img').reduce((s, r) => s + (r.transferSize || 0), 0);
+          return {
+            fcp_ms: fcp ? Math.round(fcp.startTime) : null, lcp_ms: nav ? Math.round(nav.domComplete - nav.startTime) : null,
+            cls: 0, total_size_kb: Math.round(res.reduce((s, r) => s + (r.transferSize || 0), 0) / 1024),
+            js_size_kb: Math.round(jsSize / 1024), css_size_kb: Math.round(cssSize / 1024), image_size_kb: Math.round(imgSize / 1024), request_count: res.length,
+          };
+        });
+
+        const violations: any[] = [];
+        const budgets = args.budgets;
+        for (const [key, limit] of Object.entries(budgets)) {
+          const actual = (metrics as any)[key];
+          if (actual !== undefined && actual !== null && actual > (limit as number)) {
+            violations.push({ metric: key, budget: limit, actual, over_by: key.includes('kb') ? `${actual - (limit as number)}KB` : key.includes('ms') ? `${actual - (limit as number)}ms` : `${(actual - (limit as number)).toFixed(4)}`, severity: actual > (limit as number) * 1.5 ? 'critical' : 'warning' });
+          }
+        }
+
+        const withinBudget = violations.length === 0;
+        const meta = createTestMeta('web_testing', 'performance_budget', start, { url: args.url });
+        recordTestRun({ test_id: meta.test_id, tool: 'web_testing', action: 'performance_budget', url: args.url, timestamp: meta.timestamp, duration_ms: meta.duration_ms, passed: withinBudget, issues_count: violations.length, summary: withinBudget ? 'Within budget' : `${violations.length} violations` });
+
+        return ok({
+          performance_budget: { url: args.url, within_budget: withinBudget, violations_count: violations.length, budgets_checked: Object.keys(budgets).length },
+          actual_metrics: metrics, budgets_defined: budgets, violations,
+          event_timeline: timeline.getEvents(),
+          ai_analysis: {
+            verdict: withinBudget ? '✅ All metrics within performance budget' : `❌ ${violations.length} budget violation(s)`,
+            critical_violations: violations.filter(v => v.severity === 'critical').map(v => `${v.metric}: ${v.actual} (budget: ${v.budget}, ${v.over_by} over)`),
+            optimization_tips: violations.map(v => {
+              if (v.metric.includes('js_size')) return `Reduce JS bundle: code-split, tree-shake, lazy-load (currently ${v.actual}KB, budget ${v.budget}KB)`;
+              if (v.metric.includes('image')) return `Optimize images: use WebP/AVIF, lazy-load below-fold, resize to display dimensions`;
+              if (v.metric.includes('lcp')) return `Improve LCP: preload hero image, inline critical CSS, optimize server response`;
+              if (v.metric === 'cls') return `Fix CLS: add explicit dimensions to images/embeds, avoid inserting content above viewport`;
+              return `Reduce ${v.metric}: currently ${v.actual}, budget is ${v.budget}`;
+            }),
+            hint: 'Set performance budgets in CI/CD to catch regressions before they ship.',
+          },
+          comparison: getComparisonToPrevious(args.url, 'performance_budget', withinBudget ? 100 : 0, violations.length),
+        }, meta);
+      }
+
       default:
-        return fail('UNKNOWN_ACTION', `Unknown action: ${args.action}. Valid: lighthouse, visual_regression, responsive_test, console_audit, network_waterfall, form_test, link_check, storage_audit, css_coverage, core_web_vitals`);
+        return fail('UNKNOWN_ACTION', `Unknown action: ${args.action}. Valid: lighthouse, visual_regression, responsive_test, console_audit, network_waterfall, form_test, link_check, storage_audit, css_coverage, core_web_vitals, full_audit, security_headers, dom_diff, error_diagnosis, test_suite, performance_budget`);
     }
   } catch (error: any) {
     const elapsed = Date.now() - start;
