@@ -90,7 +90,7 @@ export const mobileTestingSchema = {
       battery_level: { type: 'number', description: 'Battery level 0-100 (battery_sim)' },
       battery_charging: { type: 'boolean', description: 'Whether charging (battery_sim)', default: false },
       // Orientation
-      rotation: { type: 'number', enum: [0, 1, 2, 3], description: '0=portrait, 1=landscape-left, 2=portrait-inverted, 3=landscape-right' },
+      rotation: { type: 'string', enum: ['0', '1', '2', '3'], description: '0=portrait, 1=landscape-left, 2=portrait-inverted, 3=landscape-right' },
       // Monkey test
       monkey_events: { type: 'number', description: 'Number of random events (monkey_test)', default: 500 },
       // Screenshot
