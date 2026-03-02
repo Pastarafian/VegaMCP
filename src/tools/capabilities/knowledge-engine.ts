@@ -38,7 +38,7 @@ export const knowledgeEngineSchema = {
       id: { type: 'string', description: 'Entry ID (for add, delete). Auto-generated if not provided.' },
       collection: {
         type: 'string',
-        enum: ['knowledge', 'code_snippets', 'prompt_templates'],
+        enum: ['knowledge', 'code_snippets', 'prompt_templates', 'exploratory_tips'],
         description: 'Collection to operate on',
         default: 'knowledge',
       },

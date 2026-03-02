@@ -86,6 +86,30 @@ const TASK_TYPE_MAP: Record<string, { coordinator: CoordinatorType; preferredRol
 };
 
 // ═══════════════════════════════════════════════
+// FST (Finite-State Transducer) EDGE TRANSITIONS
+// ═══════════════════════════════════════════════
+// Enforces strict agent workflows to prevent infinite loops (arXiv:2602.21806)
+// A task type can only generate follow-up tasks if they are in its allowed edges.
+
+const FST_ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  'planning': ['task_decomposition', 'research', 'code_generation'],
+  'task_decomposition': ['code_generation', 'web_research', 'data_analysis'],
+  'code_generation': ['testing', 'review', 'debugging'],
+  'testing': ['debugging', 'integration', 'post_mortem', 'failure_analysis'],
+  'debugging': ['code_generation', 'testing'],
+  'review': ['code_generation', 'integration', 'critique'],
+  'research': ['summarize', 'planning', 'hypothesis_generate'],
+  'web_research': ['summarize', 'data_analysis'],
+  // Default restrictive transitions if not specified
+  '*': ['summarize', 'error']
+};
+
+function isTransitionAllowed(fromTask: string, toTask: string): boolean {
+  const allowed = FST_ALLOWED_TRANSITIONS[fromTask] || FST_ALLOWED_TRANSITIONS['*'];
+  return allowed.includes(toTask) || allowed.includes('*');
+}
+
+// ═══════════════════════════════════════════════
 // SWARM ORCHESTRATOR
 // ═══════════════════════════════════════════════
 
@@ -370,9 +394,19 @@ export class SwarmOrchestrator {
         updateAgentState(agentId, { tasks_completed: state.tasks_completed + 1 });
       }
 
-      // Handle follow-up tasks
+      // Handle follow-up tasks with FST Verification
       if (result.followUpTasks) {
         for (const followUp of result.followUpTasks) {
+          if (!isTransitionAllowed(task.task_type, followUp.taskType)) {
+            console.error(`[Swarm-FST] Blocked illegal state transition: ${task.task_type} -> ${followUp.taskType}`);
+            // Auto-redirect to failure analysis instead of letting agent drift
+            await this.submitTask('failure_analysis', {
+              reason: `FST Violation: Cannot transition from ${task.task_type} to ${followUp.taskType}`,
+              original_input: followUp.input
+            }, { priority: 1, parentTaskId: taskId });
+            continue;
+          }
+
           await this.submitTask(followUp.taskType, followUp.input, {
             priority: followUp.priority,
             parentTaskId: taskId,

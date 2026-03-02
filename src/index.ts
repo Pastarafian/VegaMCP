@@ -116,6 +116,12 @@ import { webTestingSchema, handleWebTesting } from './tools/capabilities/web-tes
 import { apiTestingSchema, handleApiTesting } from './tools/capabilities/api-testing.js';
 import { accessibilitySchema, handleAccessibility } from './tools/capabilities/accessibility-testing.js';
 import { designToolkitSchema, handleDesignToolkit } from './tools/capabilities/design-toolkit.js';
+import { desktopTestingSchema, handleDesktopTesting } from './tools/capabilities/desktop-testing.js';
+import { advancedTestingSchema, handleAdvancedTesting } from './tools/capabilities/advanced-testing.js';
+import { databaseTestingSchema, handleDatabaseTesting } from './tools/capabilities/database-testing.js';
+import { serverTestingSchema, handleServerTesting } from './tools/capabilities/server-testing.js';
+import { securityTestingSchema, handleSecurityTesting } from './tools/capabilities/security-testing.js';
+import { visualTestingSchema, handleVisualTesting } from './tools/capabilities/visual-testing.js';
 
 // --- v3.2 Seed Data (PolyAlgo, EasyPrompts, BugTaxonomy) ---
 import { seedDataSchema, handleSeedData, autoSeed } from './seed/seed-runner.js';
@@ -271,6 +277,12 @@ const TOOL_ANNOTATIONS: Record<string, {
   api_testing: { title: 'API Testing Suite', readOnlyHint: true, openWorldHint: true },
   accessibility: { title: 'Accessibility Testing', readOnlyHint: true, openWorldHint: true },
   design_toolkit: { title: 'Design Toolkit & Converter', readOnlyHint: true, openWorldHint: true },
+  desktop_testing: { title: 'Desktop App Testing', readOnlyHint: false, openWorldHint: false },
+  advanced_testing: { title: 'Advanced & Sanity Testing', readOnlyHint: false, openWorldHint: true },
+  database_testing: { title: 'Database Testing Core', readOnlyHint: false },
+  server_testing: { title: 'Server / Infrastructure Testing', readOnlyHint: false, openWorldHint: true },
+  security_testing: { title: 'Deep Security Scans', readOnlyHint: true, openWorldHint: true },
+  visual_testing: { title: 'Advanced Visual & GUI Testing', readOnlyHint: true, openWorldHint: true },
 };
 
 // ============================================================
@@ -595,6 +607,12 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: webTestingSchema, handler: handleWebTesting });
     tools.push({ schema: apiTestingSchema, handler: handleApiTesting });
     tools.push({ schema: accessibilitySchema, handler: handleAccessibility });
+    tools.push({ schema: desktopTestingSchema, handler: handleDesktopTesting });
+    tools.push({ schema: advancedTestingSchema, handler: handleAdvancedTesting });
+    tools.push({ schema: databaseTestingSchema, handler: handleDatabaseTesting });
+    tools.push({ schema: serverTestingSchema, handler: handleServerTesting });
+    tools.push({ schema: securityTestingSchema, handler: handleSecurityTesting });
+    tools.push({ schema: visualTestingSchema, handler: handleVisualTesting });
   }
 
   // ═══════════════════════════════════════════
