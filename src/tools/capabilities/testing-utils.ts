@@ -133,6 +133,53 @@ export function fingerprintError(message: string, source?: string, line?: number
 }
 
 // ============================================================
+// ALIVE: Instructive Verbal Evaluation (Cognitive Synergy)
+// ============================================================
+
+export interface CognitiveEvaluation {
+  symptom: string;
+  underlying_principle: string;
+  instructive_feedback: string;
+}
+
+export function generateInstructiveEvaluation(fingerprint: ErrorFingerprint): CognitiveEvaluation {
+  // Rather than just returning a raw stack trace, we return "Instructive Verbal Evaluation"
+  // based on the ALIVE framework (arXiv:2602.05472) to internalize the logic of correctness.
+  
+  let principle = "An unhandled exception occurred, violating the runtime execution contract.";
+  let feedback = "Review the raw error and trace to identify the exact line of failure.";
+
+  switch (fingerprint.auto_category) {
+    case 'null_reference':
+      principle = "State-space uncertainty. A variable was assumed to hold a defined object reference, but the actual runtime state evaluated to null or undefined.";
+      feedback = "Do not blindly access properties. Implement defensive programming. Enforce a physical contract (e.g., optional chaining or explicit null checks) before accessing nested object properties.";
+      break;
+    case 'type_error':
+      principle = "Interface mismatch. The executed operation is not supported by the data type provided at runtime.";
+      feedback = "Verify the logical data flow. The variable's type transformed between assignment and execution. Trace the variable assignment and assert its type before invocation.";
+      break;
+    case 'syntax_error':
+      principle = "Grammatical violation of the interpreter's expected AST (Abstract Syntax Tree).";
+      feedback = "The code failed at the parsing stage, not execution. Carefully review brackets, parentheses, and keyword spelling within the modified block.";
+      break;
+    case 'network_error':
+      principle = "I/O boundary failure. The application failed to establish a handshake with an external resource.";
+      feedback = "The error is external to the logic. Verify endpoint URLs, network conditions, and consider implementing graceful degradation or retry-with-backoff strategies.";
+      break;
+    default:
+      if (fingerprint.suggested_fix) {
+        feedback = `Logical critique: ${fingerprint.suggested_fix}`;
+      }
+  }
+
+  return {
+    symptom: fingerprint.message,
+    underlying_principle: principle,
+    instructive_feedback: feedback
+  };
+}
+
+// ============================================================
 // Test History (In-Memory Store)
 // ============================================================
 

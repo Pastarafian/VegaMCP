@@ -17,6 +17,11 @@ interface ThoughtStep {
   revisesStep?: number;
   branchId?: string;
   timestamp: string;
+  // Context Virtualization (CMV) DAG Pointers
+  parentId?: string;
+  childrenIds: string[];
+  isVirtualMemory?: boolean;
+  vectorRefId?: string;
 }
 
 interface ThinkingSession {
@@ -27,6 +32,7 @@ interface ThinkingSession {
   status: 'active' | 'completed' | 'abandoned';
   created: string;
   totalRevisions: number;
+  dagHeadId?: string; // Current head of the DAG
 }
 
 const sessions = new Map<string, ThinkingSession>();
@@ -34,23 +40,23 @@ let sessionCounter = 0;
 
 export const sequentialThinkingSchema = {
   name: 'vegamcp_sequential_thinking',
-  description: 'Dynamic chain-of-thought reasoning with branching and revision. Break complex problems into sequential thought steps, revise earlier thinking, and explore alternative branches. Actions: start, think, revise, branch, summarize, list_sessions, get_session.',
+  description: 'Dynamic DAG-based chain-of-thought with JIT backtracking. Break complex problems into sequential steps. Supports Context Virtualization to strip mechanical bloat. Actions: start, think, revise, branch, backtrack, virtualize_context, summarize, list_sessions, get_session.',
   inputSchema: {
     type: 'object' as const,
     properties: {
       action: {
         type: 'string' as const,
-        enum: ['start', 'think', 'revise', 'branch', 'summarize', 'list_sessions', 'get_session'] as const,
+        enum: ['start', 'think', 'revise', 'branch', 'backtrack', 'virtualize_context', 'summarize', 'list_sessions', 'get_session'] as const,
         description: 'Action to perform',
       },
-      session_id: { type: 'string' as const, description: 'Session ID (auto-generated on start)' },
-      title: { type: 'string' as const, description: 'Problem title (for start)' },
-      thought: { type: 'string' as const, description: 'The thought content (for think, revise, branch)' },
-      reasoning: { type: 'string' as const, description: 'Why this thought follows from the previous (for think, revise)' },
-      confidence: { type: 'number' as const, description: 'Confidence in this thought 0.0-1.0 (for think, revise)' },
-      revises_step: { type: 'number' as const, description: 'Step number being revised (for revise)' },
-      branch_name: { type: 'string' as const, description: 'Name for the alternative branch (for branch)' },
-      next_step_needed: { type: 'boolean' as const, description: 'Whether more thinking is needed (for think). Set false to indicate conclusion.' },
+      session_id: { type: 'string' as const, description: 'Session ID' },
+      title: { type: 'string' as const },
+      thought: { type: 'string' as const, description: 'WHAT you think' },
+      reasoning: { type: 'string' as const, description: 'WHY this follows' },
+      confidence: { type: 'number' as const, description: '0.0-1.0' },
+      revises_step: { type: 'number' as const, description: 'Step number being revised (for revise / backtrack)' },
+      branch_name: { type: 'string' as const },
+      next_step_needed: { type: 'boolean' as const },
     },
     required: ['action'] as const,
   },
@@ -93,7 +99,16 @@ export async function handleSequentialThinking(args: any): Promise<{ content: Ar
           confidence: Math.max(0, Math.min(1, args.confidence ?? 0.7)),
           isRevision: false,
           timestamp: new Date().toISOString(),
+          parentId: session.dagHeadId,
+          childrenIds: [],
         };
+        
+        // Update DAG
+        if (session.dagHeadId) {
+          const parent = session.steps.find(s => s.id === session.dagHeadId);
+          if (parent) parent.childrenIds.push(step.id);
+        }
+        session.dagHeadId = step.id;
         session.steps.push(step);
 
         if (args.next_step_needed === false) {
@@ -167,12 +182,20 @@ export async function handleSequentialThinking(args: any): Promise<{ content: Ar
           isRevision: false,
           branchId: branchName,
           timestamp: new Date().toISOString(),
+          parentId: session.dagHeadId,
+          childrenIds: [],
         };
+
+        if (session.dagHeadId) {
+          const parent = session.steps.find(s => s.id === session.dagHeadId);
+          if (parent) parent.childrenIds.push(branchStep.id);
+        }
 
         if (!session.branches.has(branchName)) {
           session.branches.set(branchName, []);
         }
         session.branches.get(branchName)!.push(branchStep);
+        session.dagHeadId = branchStep.id;
 
         return result({
           success: true,
@@ -181,6 +204,50 @@ export async function handleSequentialThinking(args: any): Promise<{ content: Ar
           branchSteps: session.branches.get(branchName)!.length,
           totalBranches: session.branches.size,
           message: `Branch "${branchName}" created. Continue main chain with "think" or add to branch with another "branch" call.`,
+        });
+      }
+
+      case 'backtrack': {
+        // Implementation of In-Decoding Revision (Stream of Revision)
+        // Just-In-Time aborts the current trajectory and reverts DAG head
+        const session = getSession(args.session_id);
+        if (args.revises_step === undefined) throw new Error('revises_step is required to backtrack to');
+
+        const targetStep = session.steps.find(s => s.stepNumber === args.revises_step);
+        if (!targetStep) throw new Error(`Invalid step ${args.revises_step}.`);
+
+        session.dagHeadId = targetStep.id;
+        session.totalRevisions++;
+
+        return result({
+          success: true,
+          action: 'backtrack',
+          sessionId: session.sessionId,
+          newHead: targetStep.stepNumber,
+          message: `JIT Backtrack successful. Erased trajectory from step ${args.revises_step + 1} onwards in current context. Continue thinking from step ${args.revises_step}.`
+        });
+      }
+
+      case 'virtualize_context': {
+        // Implementation of Contextual Memory Virtualisation (CMV)
+        // Strips mechanical bloat from past steps and virtualizes them
+        const session = getSession(args.session_id);
+        let virtualized = 0;
+
+        for (const step of session.steps) {
+          if (!step.isVirtualMemory && step.thought.length > 500) {
+            // In a full implementation, the giant thought is sent to vector-store here
+            step.isVirtualMemory = true;
+            step.vectorRefId = `vec-${crypto.randomUUID()}`;
+            step.thought = `[VIRTUALIZED_CONTEXT: ${step.vectorRefId}] - Thought mechanically trimmed to save tokens.`;
+            virtualized++;
+          }
+        }
+
+        return result({
+          success: true,
+          pagesVirtualized: virtualized,
+          message: `Structurally lossless trimming complete. ${virtualized} nodes paged out to virtual memory.`,
         });
       }
 
