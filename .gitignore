@@ -26,10 +26,34 @@ ehthumbs.db
 
 # Logs & test output
 *.log
+err.log
 setup-log.txt
 setup-stdout.txt
 setup-stderr.txt
 test-stderr.txt
+
+# Test output & artifacts
+test_output*.txt
+test_utf8*.txt
+pre_fix.txt
+post_fix.txt
+scan_out.txt
+
+# Scan & safety reports
+full_scan_report.json
+safety_results.json
+safety_results.txt
+
+# Dev-only test scripts
+test_*.js
+test_*.mjs
+test_*.ts
+eval_files.js
+scan_full_codebase.ts
+vegaoptimizer_audit.js
+
+# Test fixture files
+src/test-files/
 
 # UsefulCode (private tools — not for public repo)
 UsefulCode/
@@ -37,6 +61,7 @@ UsefulCode/
 # Test & audit scripts (development only)
 test-*.mjs
 test-*.bat
+test-*.js
 
 # Playwright
 test-results/

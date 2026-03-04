@@ -116,12 +116,19 @@ import { webTestingSchema, handleWebTesting } from './tools/capabilities/web-tes
 import { apiTestingSchema, handleApiTesting } from './tools/capabilities/api-testing.js';
 import { accessibilitySchema, handleAccessibility } from './tools/capabilities/accessibility-testing.js';
 import { designToolkitSchema, handleDesignToolkit } from './tools/capabilities/design-toolkit.js';
+import { securityToolkitSchema, handleSecurityToolkit } from './tools/capabilities/security-toolkit.js';
+import { codeToolkitSchema, handleCodeToolkit } from './tools/capabilities/code-toolkit.js';
+import { devopsToolkitSchema, handleDevopsToolkit } from './tools/capabilities/devops-toolkit.js';
+import { performanceToolkitSchema, handlePerformanceToolkit } from './tools/capabilities/performance-toolkit.js';
+import { seoToolkitSchema, handleSeoToolkit } from './tools/capabilities/seo-toolkit.js';
+import { dataToolkitSchema, handleDataToolkit } from './tools/capabilities/data-toolkit.js';
 import { desktopTestingSchema, handleDesktopTesting } from './tools/capabilities/desktop-testing.js';
 import { advancedTestingSchema, handleAdvancedTesting } from './tools/capabilities/advanced-testing.js';
 import { databaseTestingSchema, handleDatabaseTesting } from './tools/capabilities/database-testing.js';
 import { serverTestingSchema, handleServerTesting } from './tools/capabilities/server-testing.js';
 import { securityTestingSchema, handleSecurityTesting } from './tools/capabilities/security-testing.js';
 import { visualTestingSchema, handleVisualTesting } from './tools/capabilities/visual-testing.js';
+import { sandboxTestingSchema, handleSandboxTesting } from './tools/capabilities/sandbox-testing.js';
 
 // --- v3.2 Seed Data (PolyAlgo, EasyPrompts, BugTaxonomy) ---
 import { seedDataSchema, handleSeedData, autoSeed } from './seed/seed-runner.js';
@@ -276,7 +283,7 @@ const TOOL_ANNOTATIONS: Record<string, {
   web_testing: { title: 'Web Testing Suite', readOnlyHint: true, openWorldHint: true },
   api_testing: { title: 'API Testing Suite', readOnlyHint: true, openWorldHint: true },
   accessibility: { title: 'Accessibility Testing', readOnlyHint: true, openWorldHint: true },
-  design_toolkit: { title: 'Design Toolkit & Converter', readOnlyHint: true, openWorldHint: true },
+  expert_toolkits: { title: 'Expert System Toolkits', readOnlyHint: true, openWorldHint: true },
   desktop_testing: { title: 'Desktop App Testing', readOnlyHint: false, openWorldHint: false },
   advanced_testing: { title: 'Advanced & Sanity Testing', readOnlyHint: false, openWorldHint: true },
   database_testing: { title: 'Database Testing Core', readOnlyHint: false },
@@ -511,6 +518,32 @@ async function handleAgentOpsDispatch(args: any): Promise<any> {
   }
 }
 
+const expertToolkitsSchema = {
+  name: 'expert_toolkits',
+  description: 'Expert AI Toolkits. Actions: design (UI/UX generation), code (refactoring), security (scans), performance (metrics), devops (CI/CD), seo (semantics), data (DB tuning).',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      toolkit: { type: 'string', enum: ['design', 'code', 'security', 'performance', 'devops', 'seo', 'data'], description: 'The specific toolkit to invoke' },
+      payload: { type: 'object', description: 'Arguments payload matching the chosen toolkit requirements' }
+    },
+    required: ['toolkit', 'payload']
+  }
+};
+
+async function handleExpertToolkitsDispatch(args: any): Promise<any> {
+  switch (args.toolkit) {
+    case 'design': return handleDesignToolkit(args.payload || {});
+    case 'code': return handleCodeToolkit(args.payload || {});
+    case 'security': return handleSecurityToolkit(args.payload || {});
+    case 'performance': return handlePerformanceToolkit(args.payload || {});
+    case 'devops': return handleDevopsToolkit(args.payload || {});
+    case 'seo': return handleSeoToolkit(args.payload || {});
+    case 'data': return handleDataToolkit(args.payload || {});
+    default: return { content: [{ type: 'text', text: JSON.stringify({ error: `Unknown toolkit: ${args.toolkit}` }) }] };
+  }
+}
+
 // ============================================================
 // Tool Registry (Consolidated)
 // ============================================================
@@ -613,13 +646,14 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: serverTestingSchema, handler: handleServerTesting });
     tools.push({ schema: securityTestingSchema, handler: handleSecurityTesting });
     tools.push({ schema: visualTestingSchema, handler: handleVisualTesting });
+    tools.push({ schema: sandboxTestingSchema, handler: handleSandboxTesting });
   }
 
   // ═══════════════════════════════════════════
-  // DESIGN & CONVERSION
+  // EXPERT TOOLKITS (merged 7→1)
   // ═══════════════════════════════════════════
-  if (profile === 'full' || profile === 'coding') {
-    tools.push({ schema: designToolkitSchema, handler: handleDesignToolkit });
+  if (profile === 'full' || profile === 'coding' || profile === 'ops') {
+    tools.push({ schema: expertToolkitsSchema, handler: handleExpertToolkitsDispatch });
   }
 
   // ═══════════════════════════════════════════

@@ -14,7 +14,7 @@ VegaMCP has been configured as an MCP server in Kimi Code.
 | Setting | Value |
 |---------|-------|
 | **Command** | `node` |
-| **Script** | `C:\Users\fakej\Documents\VegaMCP\build\index.js` |
+| **Script** | `/path/to/VegaMCP/build/index.js` |
 | **Tools** | 60+ tools (full profile) |
 | **Profile** | `full` |
 
@@ -102,7 +102,7 @@ Just ask for what you need:
 ### MCP Server Not Connected
 ```bash
 # Test the MCP server manually
-cd C:\Users\fakej\Documents\VegaMCP
+cd /path/to/VegaMCP
 npm run build
 node build/index.js
 ```

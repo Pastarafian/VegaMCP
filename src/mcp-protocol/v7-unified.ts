@@ -11,11 +11,11 @@ export function getV7Tools() {
   const clusters = [
     {
       name: "omni_assistant",
-      description: "Core intelligence and utility cluster: ai, budget, update, prompt library, web search, code analysis, document reader, sequential thinking.",
+      description: "Core intelligence and utility cluster: ai, budget, update, prompt library, web search, code analysis, document reader, sequential thinking, expert_toolkits.",
       tools: [
         'route_to_reasoning_model', 'token_budget', 'auto_update', 'prompt_library', 
         'web_search', 'github_scraper', 'code_analysis', 'sequential_thinking',
-        'document_reader', 'elicit', 'knowledge_engine', 'memory'
+        'document_reader', 'elicit', 'knowledge_engine', 'memory', 'expert_toolkits'
       ]
     },
     {
@@ -55,8 +55,8 @@ export function getV7Tools() {
       description: "Automated QA and Security cluster: mobile, web, api, db, server, desktop, accessibility, security, visual, stress, design.",
       tools: [
         'mobile_testing', 'web_testing', 'api_testing', 'accessibility', 
-        'design_toolkit', 'desktop_testing', 'advanced_testing', 
-        'database_testing', 'server_testing', 'security_testing', 'visual_testing',
+        'desktop_testing', 'advanced_testing', 'database_testing', 
+        'server_testing', 'security_testing', 'visual_testing',
         'security_scanner', 'stress_test', 'zero_trust', 'vault'
       ]
     }

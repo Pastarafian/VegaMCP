@@ -153,6 +153,7 @@ export async function handleSequentialThinking(args: any): Promise<{ content: Ar
           isRevision: true,
           revisesStep: targetStep,
           timestamp: new Date().toISOString(),
+          childrenIds: [],
         };
         session.steps.push(step);
         session.totalRevisions++;
