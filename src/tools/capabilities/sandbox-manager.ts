@@ -1,5 +1,5 @@
 /**
- * VegaMCP — Sandbox Manager (v3.0 — Docker-First)
+ * VegaMCP — Sandbox Manager (v4.0 — Docker-First, Full Lifecycle)
  * 
  * Docker-based sandboxing with specialized containers for each use case.
  * 
@@ -8,6 +8,21 @@
  *            Directory Jail   — Temp filesystem sandbox
  *            Process Sandbox  — Isolated child process
  *            PowerShell       — Constrained Language Mode execution
+ * 
+ * v4.0 Additions:
+ *   - Package installation (apt/pip/npm) with safety-gated blocklist
+ *   - Container snapshots (docker commit → reusable images)
+ *   - Port forwarding for web app testing
+ *   - Container logs (stream/tail)
+ *   - Resource monitoring (CPU/RAM/disk)
+ *   - Container diff (filesystem changes since creation)
+ *   - Dockerfile generation from install history
+ *   - Auto-cleanup TTL (containers auto-destroy after idle timeout)
+ *   - Exec with working directory
+ *   - Batch exec (run multiple commands sequentially)
+ *   - Container pause/unpause/restart
+ *   - Package cache volumes (speed up repeated installs)
+ *   - Environment variable injection post-create
  */
 
 import { execSync, spawn, ChildProcess } from 'child_process';
@@ -24,11 +39,21 @@ export interface SandboxInstance {
   id: string;
   type: 'docker' | 'process' | 'vm' | 'directory';
   name: string;
-  status: 'creating' | 'running' | 'stopped' | 'destroyed';
+  status: 'creating' | 'running' | 'paused' | 'stopped' | 'destroyed';
   created: string;
   workDir: string;
   pid?: number;
   metadata: Record<string, any>;
+  /** Track installed packages for Dockerfile generation */
+  installHistory: InstallRecord[];
+  /** Port mappings: hostPort → containerPort */
+  portMappings: Record<number, number>;
+  /** Auto-destroy after this many ms of idle time (0 = disabled) */
+  ttlMs: number;
+  /** Last activity timestamp */
+  lastActivity: number;
+  /** Environment variables injected post-create */
+  envVars: Record<string, string>;
 }
 
 export interface ExecResult {
@@ -38,7 +63,51 @@ export interface ExecResult {
   duration_ms: number;
 }
 
+export interface InstallRecord {
+  timestamp: string;
+  manager: 'apt' | 'pip' | 'npm' | 'apk';
+  packages: string[];
+  exitCode: number;
+}
+
+export interface ResourceUsage {
+  cpu_percent: string;
+  memory_usage: string;
+  memory_limit: string;
+  memory_percent: string;
+  net_io: string;
+  block_io: string;
+  pids: string;
+}
+
 export type DockerProfile = 'gui-test' | 'ocr-test' | 'api-test' | 'security-test' | 'general';
+
+// ============================================================
+// Safety: Package Blocklist
+// ============================================================
+const BLOCKED_PACKAGES = new Set([
+  // Dangerous system tools
+  'nmap', 'masscan', 'hping3', 'netcat-openbsd', 'ncat',
+  'john', 'hashcat', 'hydra', 'medusa', 'aircrack-ng',
+  'metasploit-framework', 'sqlmap', 'nikto', 'dirb', 'gobuster',
+  'beef-xss', 'ettercap', 'bettercap', 'mitmproxy',
+  'cron-daemon', 'at', 'sshd', 'openssh-server',
+  // Crypto miners
+  'xmrig', 'cpuminer', 'cgminer', 'bfgminer',
+  // Kernel/system modification
+  'linux-headers', 'dkms', 'module-assistant',
+  // npm dangerous
+  'puppeteer', 'playwright',  // use host Playwright instead
+]);
+
+function isPackageAllowed(pkg: string): boolean {
+  const normalized = pkg.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  if (BLOCKED_PACKAGES.has(normalized)) return false;
+  // Block version-pinned blocked packages too (e.g. "nmap=7.92")
+  const baseName = normalized.split(/[=<>@]/)[0];
+  if (BLOCKED_PACKAGES.has(baseName)) return false;
+  return true;
+}
 
 // ============================================================
 // Sandbox Registry
@@ -49,6 +118,33 @@ const SANDBOX_BASE = path.join(os.tmpdir(), 'vegamcp_sandboxes');
 if (!fs.existsSync(SANDBOX_BASE)) fs.mkdirSync(SANDBOX_BASE, { recursive: true });
 
 const DOCKER_IMAGE = 'vega-sandbox:latest';
+const CACHE_VOLUME_APT = 'vega-apt-cache';
+const CACHE_VOLUME_PIP = 'vega-pip-cache';
+const CACHE_VOLUME_NPM = 'vega-npm-cache';
+
+// TTL cleanup interval
+let ttlIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function startTTLCleanup() {
+  if (ttlIntervalId) return;
+  ttlIntervalId = setInterval(() => {
+    const now = Date.now();
+    for (const [id, sb] of sandboxes) {
+      if (sb.ttlMs > 0 && (now - sb.lastActivity) > sb.ttlMs) {
+        try {
+          if (sb.type === 'docker') dockerDestroy(id);
+          else if (sb.type === 'process') processDestroy(id);
+          else if (sb.type === 'directory') directoryDestroy(id);
+        } catch {}
+      }
+    }
+  }, 30000); // Check every 30s
+}
+
+function touchSandbox(id: string) {
+  const sb = sandboxes.get(id);
+  if (sb) sb.lastActivity = Date.now();
+}
 
 function genId(): string {
   return `sb-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
@@ -107,6 +203,9 @@ export function dockerCreate(opts: {
   network?: boolean;
   env?: Record<string, string>;
   resourceLimits?: { cpus?: string; memory?: string };
+  ports?: Record<number, number>;   // hostPort → containerPort
+  ttlMs?: number;                    // auto-destroy after idle
+  enablePackageCache?: boolean;      // mount package cache volumes
 }): SandboxInstance {
   const id = genId();
   const containerName = `vega-sb-${id}`;
@@ -119,7 +218,21 @@ export function dockerCreate(opts: {
     opts.resourceLimits?.memory ? `--memory=${opts.resourceLimits.memory}` : '--memory=2g',
   ].join(' ');
 
-  const cmd = `docker run -d --rm ${networkFlag} ${resourceArgs} --name ${containerName} ${volumeArgs} ${envArgs} ${DOCKER_IMAGE} shell`;
+  // Port mappings
+  const portMappings: Record<number, number> = opts.ports || {};
+  const portArgs = Object.entries(portMappings).map(([host, container]) => `-p ${host}:${container}`).join(' ');
+
+  // Package cache volumes (speed up repeated installs)
+  let cacheArgs = '';
+  if (opts.enablePackageCache) {
+    cacheArgs = [
+      `-v ${CACHE_VOLUME_APT}:/var/cache/apt/archives`,
+      `-v ${CACHE_VOLUME_PIP}:/root/.cache/pip`,
+      `-v ${CACHE_VOLUME_NPM}:/root/.npm/_cacache`,
+    ].join(' ');
+  }
+
+  const cmd = `docker run -d --rm ${networkFlag} ${resourceArgs} --name ${containerName} ${volumeArgs} ${envArgs} ${portArgs} ${cacheArgs} ${DOCKER_IMAGE} shell`;
 
   try {
     const containerId = execSync(cmd, {
@@ -130,24 +243,40 @@ export function dockerCreate(opts: {
       id, type: 'docker', name: opts.name || containerName,
       status: 'running', created: new Date().toISOString(),
       workDir: '/sandbox/workspaces/current',
-      metadata: { containerName, containerId: containerId.substring(0, 12), profile, volumes: opts.volumes || [] },
+      metadata: {
+        containerName, containerId: containerId.substring(0, 12), profile,
+        volumes: opts.volumes || [], network: opts.network || false,
+        enablePackageCache: opts.enablePackageCache || false,
+      },
+      installHistory: [],
+      portMappings,
+      ttlMs: opts.ttlMs || 0,
+      lastActivity: Date.now(),
+      envVars: opts.env || {},
     };
     sandboxes.set(id, sandbox);
+
+    // Start TTL cleanup if needed
+    if (opts.ttlMs && opts.ttlMs > 0) startTTLCleanup();
+
     return sandbox;
   } catch (e: any) {
     throw new Error(`Docker create failed: ${e.message}`);
   }
 }
 
-export function dockerExec(sandboxId: string, command: string, timeoutMs = 30000): ExecResult {
+export function dockerExec(sandboxId: string, command: string, timeoutMs = 30000, workDir?: string): ExecResult {
   const sb = sandboxes.get(sandboxId);
   if (!sb || sb.type !== 'docker') throw new Error('Not a Docker sandbox');
   const { containerName } = sb.metadata;
   const start = Date.now();
+  touchSandbox(sandboxId);
+
+  const wdFlag = workDir ? `-w "${workDir}"` : '';
 
   try {
     const stdout = execSync(
-      `docker exec ${containerName} bash -c "${command.replace(/"/g, '\\"')}"`,
+      `docker exec ${wdFlag} ${containerName} bash -c "${command.replace(/"/g, '\\"')}"`,
       { encoding: 'utf-8', timeout: timeoutMs, stdio: ['pipe', 'pipe', 'pipe'] }
     ).trim();
     return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
@@ -192,6 +321,7 @@ export function dockerRunProfile(profile: DockerProfile, opts?: {
 export function dockerCopyIn(sandboxId: string, hostPath: string, containerPath: string): boolean {
   const sb = sandboxes.get(sandboxId);
   if (!sb || sb.type !== 'docker') return false;
+  touchSandbox(sandboxId);
   try {
     execSync(`docker cp "${hostPath}" ${sb.metadata.containerName}:${containerPath}`, {
       encoding: 'utf-8', timeout: 60000, stdio: ['pipe', 'pipe', 'pipe'],
@@ -203,6 +333,7 @@ export function dockerCopyIn(sandboxId: string, hostPath: string, containerPath:
 export function dockerCopyOut(sandboxId: string, containerPath: string, hostPath: string): boolean {
   const sb = sandboxes.get(sandboxId);
   if (!sb || sb.type !== 'docker') return false;
+  touchSandbox(sandboxId);
   try {
     execSync(`docker cp ${sb.metadata.containerName}:${containerPath} "${hostPath}"`, {
       encoding: 'utf-8', timeout: 60000, stdio: ['pipe', 'pipe', 'pipe'],
@@ -235,6 +366,364 @@ export function dockerListContainers(): string[] {
     }).trim();
     return out ? out.split('\n') : [];
   } catch { return []; }
+}
+
+// ============================================================
+// NEW: Package Installation (Safety-Gated)
+// ============================================================
+
+export function dockerInstallPackages(sandboxId: string, packages: string[], manager: 'apt' | 'pip' | 'npm' | 'apk' = 'apt', timeoutMs = 120000): ExecResult & { blocked: string[] } {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') throw new Error('Not a Docker sandbox');
+  touchSandbox(sandboxId);
+
+  // Safety check
+  const blocked = packages.filter(p => !isPackageAllowed(p));
+  const allowed = packages.filter(p => isPackageAllowed(p));
+
+  if (allowed.length === 0) {
+    return {
+      exitCode: 1, stdout: '', stderr: `All packages blocked: ${blocked.join(', ')}`,
+      duration_ms: 0, blocked,
+    };
+  }
+
+  // Temporarily enable networking if needed
+  const { containerName } = sb.metadata;
+  const hadNetwork = sb.metadata.network === true;
+  if (!hadNetwork) {
+    try {
+      execSync(`docker network connect bridge ${containerName}`, {
+        encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch {}
+  }
+
+  const start = Date.now();
+  let installCmd: string;
+  const pkgList = allowed.join(' ');
+
+  switch (manager) {
+    case 'apt':
+      installCmd = `apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ${pkgList}`;
+      break;
+    case 'pip':
+      installCmd = `pip install --no-input ${pkgList}`;
+      break;
+    case 'npm':
+      installCmd = `npm install -g ${pkgList}`;
+      break;
+    case 'apk':
+      installCmd = `apk add --no-cache ${pkgList}`;
+      break;
+  }
+
+  let result: ExecResult;
+  try {
+    const stdout = execSync(
+      `docker exec ${containerName} bash -c "${installCmd.replace(/"/g, '\\"')}"`,
+      { encoding: 'utf-8', timeout: timeoutMs, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    result = { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    result = {
+      exitCode: e.status || 1,
+      stdout: e.stdout?.toString() || '',
+      stderr: e.stderr?.toString() || e.message,
+      duration_ms: Date.now() - start,
+    };
+  }
+
+  // Disconnect network if it wasn't enabled before
+  if (!hadNetwork) {
+    try {
+      execSync(`docker network disconnect bridge ${containerName}`, {
+        encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch {}
+  }
+
+  // Record install history
+  sb.installHistory.push({
+    timestamp: new Date().toISOString(), manager,
+    packages: allowed, exitCode: result.exitCode,
+  });
+
+  return { ...result, blocked };
+}
+
+// ============================================================
+// NEW: Container Snapshot (docker commit)
+// ============================================================
+
+export function dockerSnapshot(sandboxId: string, tag?: string): { success: boolean; image: string; error?: string } {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return { success: false, image: '', error: 'Not a Docker sandbox' };
+  touchSandbox(sandboxId);
+
+  const imageName = tag || `vega-snapshot:${sandboxId}`;
+  try {
+    execSync(`docker commit ${sb.metadata.containerName} ${imageName}`, {
+      encoding: 'utf-8', timeout: 60000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return { success: true, image: imageName };
+  } catch (e: any) {
+    return { success: false, image: '', error: e.message };
+  }
+}
+
+// ============================================================
+// NEW: Container Logs
+// ============================================================
+
+export function dockerLogs(sandboxId: string, tail = 100, since?: string): ExecResult {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') throw new Error('Not a Docker sandbox');
+
+  const { containerName } = sb.metadata;
+  const sinceFlag = since ? `--since "${since}"` : '';
+  const start = Date.now();
+
+  try {
+    const stdout = execSync(
+      `docker logs --tail ${tail} ${sinceFlag} ${containerName}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+// ============================================================
+// NEW: Resource Monitoring
+// ============================================================
+
+export function dockerStats(sandboxId: string): ResourceUsage | null {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return null;
+
+  try {
+    const raw = execSync(
+      `docker stats --no-stream --format "{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}" ${sb.metadata.containerName}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    const parts = raw.split('\t');
+    if (parts.length >= 6) {
+      const memParts = parts[1].split('/').map(s => s.trim());
+      return {
+        cpu_percent: parts[0],
+        memory_usage: memParts[0] || parts[1],
+        memory_limit: memParts[1] || 'unknown',
+        memory_percent: parts[2],
+        net_io: parts[3],
+        block_io: parts[4],
+        pids: parts[5],
+      };
+    }
+  } catch {}
+  return null;
+}
+
+// ============================================================
+// NEW: Container Diff (filesystem changes)
+// ============================================================
+
+export function dockerDiff(sandboxId: string): { added: string[]; changed: string[]; deleted: string[] } | null {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return null;
+
+  try {
+    const raw = execSync(
+      `docker diff ${sb.metadata.containerName}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    const lines = raw.split('\n').filter(Boolean);
+    return {
+      added: lines.filter(l => l.startsWith('A ')).map(l => l.substring(2)),
+      changed: lines.filter(l => l.startsWith('C ')).map(l => l.substring(2)),
+      deleted: lines.filter(l => l.startsWith('D ')).map(l => l.substring(2)),
+    };
+  } catch { return null; }
+}
+
+// ============================================================
+// NEW: Dockerfile Generation from Install History
+// ============================================================
+
+export function generateDockerfile(sandboxId: string): string {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb) return '# Sandbox not found';
+
+  const lines: string[] = [
+    `# Auto-generated Dockerfile from VegaMCP sandbox ${sandboxId}`,
+    `# Generated: ${new Date().toISOString()}`,
+    `FROM ${DOCKER_IMAGE}`,
+    '',
+  ];
+
+  // Group installs by manager
+  const aptPkgs: string[] = [];
+  const pipPkgs: string[] = [];
+  const npmPkgs: string[] = [];
+  const apkPkgs: string[] = [];
+
+  for (const record of sb.installHistory) {
+    if (record.exitCode !== 0) continue; // Skip failed installs
+    switch (record.manager) {
+      case 'apt': aptPkgs.push(...record.packages); break;
+      case 'pip': pipPkgs.push(...record.packages); break;
+      case 'npm': npmPkgs.push(...record.packages); break;
+      case 'apk': apkPkgs.push(...record.packages); break;
+    }
+  }
+
+  if (aptPkgs.length > 0) {
+    lines.push('# System packages');
+    lines.push(`RUN apt-get update -qq && \\`);
+    lines.push(`    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \\`);
+    lines.push(`    ${[...new Set(aptPkgs)].join(' \\\n    ')} && \\`);
+    lines.push('    apt-get clean && rm -rf /var/lib/apt/lists/*');
+    lines.push('');
+  }
+
+  if (apkPkgs.length > 0) {
+    lines.push('# Alpine packages');
+    lines.push(`RUN apk add --no-cache ${[...new Set(apkPkgs)].join(' ')}`);
+    lines.push('');
+  }
+
+  if (pipPkgs.length > 0) {
+    lines.push('# Python packages');
+    lines.push(`RUN pip install --no-cache-dir ${[...new Set(pipPkgs)].join(' ')}`);
+    lines.push('');
+  }
+
+  if (npmPkgs.length > 0) {
+    lines.push('# Node.js packages');
+    lines.push(`RUN npm install -g ${[...new Set(npmPkgs)].join(' ')}`);
+    lines.push('');
+  }
+
+  // Environment variables
+  if (Object.keys(sb.envVars).length > 0) {
+    lines.push('# Environment');
+    for (const [k, v] of Object.entries(sb.envVars)) {
+      lines.push(`ENV ${k}="${v}"`);
+    }
+    lines.push('');
+  }
+
+  // Port exposures
+  if (Object.keys(sb.portMappings).length > 0) {
+    lines.push('# Exposed ports');
+    for (const containerPort of Object.values(sb.portMappings)) {
+      lines.push(`EXPOSE ${containerPort}`);
+    }
+    lines.push('');
+  }
+
+  lines.push(`WORKDIR ${sb.workDir}`);
+  return lines.join('\n');
+}
+
+// ============================================================
+// NEW: Container Lifecycle (Pause/Unpause/Restart)
+// ============================================================
+
+export function dockerPause(sandboxId: string): boolean {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker' || sb.status !== 'running') return false;
+  try {
+    execSync(`docker pause ${sb.metadata.containerName}`, {
+      encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    sb.status = 'paused';
+    return true;
+  } catch { return false; }
+}
+
+export function dockerUnpause(sandboxId: string): boolean {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker' || sb.status !== 'paused') return false;
+  try {
+    execSync(`docker unpause ${sb.metadata.containerName}`, {
+      encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    sb.status = 'running';
+    touchSandbox(sandboxId);
+    return true;
+  } catch { return false; }
+}
+
+export function dockerRestart(sandboxId: string): boolean {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return false;
+  try {
+    execSync(`docker restart ${sb.metadata.containerName}`, {
+      encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    sb.status = 'running';
+    touchSandbox(sandboxId);
+    return true;
+  } catch { return false; }
+}
+
+// ============================================================
+// NEW: Batch Exec (multiple commands sequentially)
+// ============================================================
+
+export function dockerBatchExec(sandboxId: string, commands: string[], timeoutMs = 30000, workDir?: string): Array<ExecResult & { command: string }> {
+  const results: Array<ExecResult & { command: string }> = [];
+  for (const command of commands) {
+    const result = dockerExec(sandboxId, command, timeoutMs, workDir);
+    results.push({ ...result, command });
+    // Stop on first failure (like set -e)
+    if (result.exitCode !== 0) break;
+  }
+  return results;
+}
+
+// ============================================================
+// NEW: Environment Variable Injection Post-Create
+// ============================================================
+
+export function dockerSetEnv(sandboxId: string, vars: Record<string, string>): boolean {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return false;
+  touchSandbox(sandboxId);
+
+  // Write to container's /etc/environment and export in current shell
+  const exports = Object.entries(vars).map(([k, v]) => `echo '${k}=${v}' >> /etc/environment && export ${k}='${v}'`).join(' && ');
+  try {
+    execSync(`docker exec ${sb.metadata.containerName} bash -c "${exports.replace(/"/g, '\\"')}"`, {
+      encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    Object.assign(sb.envVars, vars);
+    return true;
+  } catch { return false; }
+}
+
+// ============================================================
+// NEW: Port Forwarding (add ports to running container)
+// ============================================================
+
+export function dockerGetPorts(sandboxId: string): Record<string, string> | null {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') return null;
+
+  try {
+    const raw = execSync(
+      `docker port ${sb.metadata.containerName}`,
+      { encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    const ports: Record<string, string> = {};
+    for (const line of raw.split('\n').filter(Boolean)) {
+      const [container, host] = line.split(' -> ');
+      if (container && host) ports[container.trim()] = host.trim();
+    }
+    return ports;
+  } catch { return {}; }
 }
 
 // ============================================================
@@ -271,6 +760,7 @@ export function processCreate(opts: {
     id, type: 'process', name: opts.name || `proc_${id}`,
     status: 'running', created: new Date().toISOString(), workDir,
     pid: child.pid, metadata: { command: opts.command, args: opts.args },
+    installHistory: [], portMappings: {}, ttlMs: 0, lastActivity: Date.now(), envVars: opts.env || {},
   };
 
   childProcesses.set(id, child);
@@ -282,6 +772,7 @@ export function processCreate(opts: {
 export function processExec(sandboxId: string, command: string, timeoutMs = 30000): ExecResult {
   const sb = sandboxes.get(sandboxId);
   if (!sb) throw new Error('Sandbox not found');
+  touchSandbox(sandboxId);
   const start = Date.now();
   try {
     const stdout = shellExec(command, timeoutMs, sb.workDir);
@@ -355,6 +846,7 @@ export function directoryCreate(opts?: { name?: string; copyFrom?: string }): Sa
     id, type: 'directory', name: opts?.name || `dir_${id}`,
     status: 'running', created: new Date().toISOString(), workDir,
     metadata: { sourceDir: opts?.copyFrom },
+    installHistory: [], portMappings: {}, ttlMs: 0, lastActivity: Date.now(), envVars: {},
   };
   sandboxes.set(id, sandbox);
   return sandbox;
