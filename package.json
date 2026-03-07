@@ -1,7 +1,7 @@
 {
   "name": "REDACTED",
-  "version": "7.0.0",
-  "description": "VegaMCP v7.0 — Full Spectrum Testing Edition. 65+ tools, 10-agent swarm, A2A protocol, zero-trust identity, MCP gateway, async tasks (SEP-1686), OAuth 2.1, agent graphs, agentic sampling v2, multimodal embeddings, dynamic indexing, MCP Apps (UI), tool search, AI-first mobile/web/API/accessibility testing suite.",
+  "version": "7.2.0",
+  "description": "VegaMCP v7.2 — Sovereign Intelligence Update. Contains The Claw Command Center, Semantic Memory, LLM Output Eval, Context7, Postgres client, and 78 integrated tools.",
   "main": "build/index.js",
   "type": "module",
   "scripts": {
