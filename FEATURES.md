@@ -1,14 +1,14 @@
-# 🚀 VegaMCP v7.0 Features
+# 🚀 VegaMCP v7.2 Features
 
-VegaMCP is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, Docker sandbox v5.0, and an AI-first testing suite (mobile, web, API, accessibility, desktop, database, server, security, visual).
+VegaMCP is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent semantic memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, Docker sandbox v5.0, and an AI-first testing suite (mobile, web, API, accessibility, desktop, database, server, security, visual).
 
-In **v7.0**, VegaMCP consolidated over 65+ granular tools into 15 unified core capability clusters, resulting in a **90% reduction in token context usage** and significantly improved agent selection accuracy.
+In **v7.2 (The Sovereign Intelligence Update)**, VegaMCP consolidated 78+ granular tools into 6 unified Omni-Clusters, optimizing orchestration for local IDEs and cloud environments.
 
-## The Core Capability Clusters (v7.0)
+## The Core Capability Clusters (v7.2 Omni-Clusters)
 
-1. **🧠 MEMORY (6 Actions)**
-   - Knowledge graph operations with entity-relationship storage.
-   - Actions: `graph` (manipulate and query nodes/relations), `bridge` (unify semantic similarity and structural data).
+1. **🧠 MEMORY (8 Actions)**
+   - Knowledge graph operations with entity-relationship storage and Semantic Vector Search.
+   - Actions: `graph` (manipulate and query nodes/relations), `bridge` (unify semantic similarity and structural data), `semantic_memory` (Ollama embeddings, cosine similarity, TF-IDF fallback, auto-context building).
 
 2. **🌐 WEB (4 Actions)**
    - Browser automation + search + GitHub access.
@@ -18,21 +18,21 @@ In **v7.0**, VegaMCP consolidated over 65+ granular tools into 15 unified core c
    - Code execution, static analysis, and file orchestration.
    - Actions: `execute` (Docker sandbox v5.0), `analyze` (AST metrics), `shell` (terminal commands), `file` (filesystem I/O), `git` (version control), `read` (document parsing), `think` (sequential chain-of-thought).
 
-4. **🤖 AI (6 Actions)**
-   - Multi-model reasoning and knowledge retrieval.
-   - Actions: `reason` (intelligent model routing/debate), `search` (vector knowledge), `rag` (hybrid graph + vector), `discover` (tool matching), `hypothesize` (generate ideas), `synthesize` (knowledge ingestion).
+4. **🤖 AI & RESEARCH (8 Actions)**
+   - Multi-model reasoning, knowledge retrieval, and output validation.
+   - Actions: `reason` (intelligent model routing/debate), `search` (vector knowledge), `rag` (hybrid graph + vector), `discover` (tool matching), `hypothesize` (generate ideas), `synthesize` (knowledge ingestion), `llm_eval` (8-metric evaluation of AI outputs including toxicity/hallucination).
 
 5. **🐝 SWARM (9 Actions)**
    - Coordinated 10-agent task orchestration queue.
    - Actions: `manage` (create tasks, assign agents, register triggers, pipe workloads, get metrics).
 
-6. **📊 DATA (5 Actions)**
-   - Database, analytics, and persistent storage.
-   - Actions: `query` (SQLite/JSON), `analytics` (MCP metrics), `ab_test`, `stream`, `vault` (Markdown notes).
+6. **📊 DATA (6 Actions)**
+   - Database, analytics, and persistent storage with full remote Postgres connectivity.
+   - Actions: `query` (SQLite/JSON), `postgres_client` (exec SQL on remote servers), `analytics` (MCP metrics), `ab_test`, `stream`, `vault` (Markdown notes).
 
-7. **🔧 OPS (8 Actions)**
-   - Infrastructure, environment, and automation.
-   - Actions: `watch` (filesystem events), `webhook`, `workflow` (YAML pipelines), `schedule` (cron jobs), `notify`, `api_request` (gateway routed), `health_check`, `auto_update`.
+7. **🔧 OPS & CONTEXT (9 Actions)**
+   - Infrastructure, environment, and 3rd-party library documentation bridging.
+   - Actions: `watch` (filesystem events), `webhook`, `workflow` (YAML pipelines), `schedule` (cron jobs), `notify`, `api_request` (gateway routed), `health_check`, `auto_update`, `context7_docs` (load entire framework docs instantly).
 
 8. **🛡️ SECURITY (5 Actions)**
    - Scanning, runtime monitoring, and trust enforcement.
