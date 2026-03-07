@@ -12,17 +12,17 @@
 
 ---
 
-> **VegaMCP** is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, AI-first testing suite (mobile, web, API, accessibility), and 65+ tools — all accessible via any MCP-compatible client.
+> **VegaMCP** is a production-grade MCP (Model Context Protocol) server providing an autonomous AI agent swarm, persistent memory, browser automation, multi-model reasoning, security gateway, agent graphs, zero-trust identity, A2A protocol, Docker sandbox v5.0, AI-first testing suite (mobile, web, API, desktop, accessibility, security, visual), and 65+ tools — all accessible via any MCP-compatible client.
 > 
-> *Version 7.0 introduces aggressive semantic token savings by functionally shrinking 60+ uncompressed tools into 15 high-level unified capability clusters—dynamically saving up to 90%+ context window consumption.*
+> *Version 7.0 introduces aggressive semantic token savings by functionally shrinking 65+ uncompressed tools into 17 high-level unified capability clusters—dynamically saving up to 90%+ context window consumption.*
 
 ## 📖 Complete Features
-**Read [FEATURES.md](./FEATURES.md) for a comprehensive list of all the 15 unified V7 capability clusters.**
+**Read [FEATURES.md](./FEATURES.md) for a comprehensive list of all 17 unified V7 capability clusters including Docker Sandbox v5.0.**
 
 ## Quick Start
 
 ### Prerequisites
-- **Node.js** 18+
+- **Node.js** 20+
 - **npm** 9+
 
 ### Installation

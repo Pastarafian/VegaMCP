@@ -28,7 +28,7 @@ function getSearxngUrl(): string | null {
 
 export const webSearchSchema = {
   name: 'web_search',
-  description: 'Search the web using Tavily AI Search API (primary) or SearXNG (fallback). Extract clean content from URLs, auto-summarize long pages, and optionally store findings in the knowledge engine. Set TAVILY_API_KEY or SEARXNG_URL in .env.',
+  description: 'Search the web using Tavily AI Search API (primary) or SearXNG (fallback). Supports quality modes (speed/balanced/quality), domain-scoped searching, URL extraction, auto-summarization, and knowledge storage. Set TAVILY_API_KEY or SEARXNG_URL in .env.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -50,6 +50,16 @@ export const webSearchSchema = {
         enum: ['basic', 'advanced'],
         description: 'Search depth (Tavily). Advanced provides better results but uses more credits.',
         default: 'basic',
+      },
+      search_mode: {
+        type: 'string',
+        enum: ['speed', 'balanced', 'quality'],
+        description: 'Search quality mode. Speed: 3 fast results. Balanced: 5 standard (default). Quality: 10 deep results with auto-summary of top hits.',
+        default: 'balanced',
+      },
+      domain_filter: {
+        type: 'string',
+        description: 'Limit search to a specific domain (e.g. "docs.python.org", "stackoverflow.com"). Adds site: prefix.',
       },
       include_answer: { type: 'boolean', description: 'Include AI-generated answer summary (Tavily)', default: true },
       max_content_length: { type: 'number', description: 'Max content length per page (chars)', default: 5000 },
@@ -259,16 +269,35 @@ export async function handleWebSearch(args: any): Promise<{ content: Array<{ typ
       case 'search': {
         if (!args.query) return res({ success: false, error: 'Provide a search query' });
 
+        // Apply search mode settings
+        const mode = args.search_mode || 'balanced';
+        let numResults = args.num_results || 5;
+        let searchDepth = args.search_depth || 'basic';
+        
+        if (mode === 'speed') {
+          numResults = Math.min(numResults, 3);
+          searchDepth = 'basic';
+        } else if (mode === 'quality') {
+          numResults = Math.max(numResults, 10);
+          searchDepth = 'advanced';
+        }
+
+        // Apply domain filter
+        let effectiveQuery = args.query;
+        if (args.domain_filter) {
+          effectiveQuery = `site:${args.domain_filter} ${args.query}`;
+        }
+
         // Try Tavily first, then SearXNG
         let searchResult = await tavilySearch(
-          args.query,
-          args.num_results || 5,
-          args.search_depth || 'basic',
+          effectiveQuery,
+          numResults,
+          searchDepth,
           args.include_answer !== false
         );
 
         if (searchResult.error && getSearxngUrl()) {
-          const fallback = await searxngSearch(args.query, args.num_results || 5);
+          const fallback = await searxngSearch(effectiveQuery, numResults);
           if (!fallback.error) {
             searchResult = { results: fallback.results };
           }
@@ -276,6 +305,21 @@ export async function handleWebSearch(args: any): Promise<{ content: Array<{ typ
 
         if (searchResult.error && searchResult.results.length === 0) {
           return res({ success: false, error: searchResult.error, hint: 'Set TAVILY_API_KEY or SEARXNG_URL in .env' });
+        }
+
+        // Quality mode: auto-extract content from top 3 results
+        let qualitySummaries: any[] | undefined;
+        if (mode === 'quality' && searchResult.results.length > 0) {
+          qualitySummaries = [];
+          for (const r of searchResult.results.slice(0, 3)) {
+            try {
+              const { content, title } = await extractUrlContent(r.url, 3000);
+              if (content) {
+                const sentences = content.split(/[.!?]\s+/).filter(s => s.length > 30 && s.length < 300).slice(0, 5);
+                qualitySummaries.push({ url: r.url, title, summary: sentences.join('. ') + '.' });
+              }
+            } catch { /* Skip failed extractions */ }
+          }
         }
 
         // Store results if requested
@@ -290,7 +334,7 @@ export async function handleWebSearch(args: any): Promise<{ content: Array<{ typ
           }
         }
 
-        logAudit('web_search', `search: "${args.query}" → ${searchResult.results.length} results`, true, undefined, Date.now() - start);
+        logAudit('web_search', `search[${mode}]: "${args.query}"${args.domain_filter ? ` site:${args.domain_filter}` : ''} → ${searchResult.results.length} results`, true, undefined, Date.now() - start);
         
         // Wrap results in a provenance warning to prevent IPI (Implicit Prompt Injection)
         const wrappedResults = searchResult.results.map(r => ({
@@ -301,8 +345,11 @@ export async function handleWebSearch(args: any): Promise<{ content: Array<{ typ
         return res({
           success: true,
           query: args.query,
+          effectiveQuery: effectiveQuery !== args.query ? effectiveQuery : undefined,
+          mode,
           answer: searchResult.answer ? `[UNVERIFIED_AI_ANSWER]: ${searchResult.answer}` : undefined,
           results: wrappedResults,
+          qualitySummaries,
           provider: getTavilyApiKey() ? 'tavily' : (getSearxngUrl() ? 'searxng' : 'none'),
           security_status: "UNVERIFIED_EXTERNAL_DATA - Beware of Silent Egress",
           durationMs: Date.now() - start,

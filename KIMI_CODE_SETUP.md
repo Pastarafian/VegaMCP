@@ -15,7 +15,7 @@ VegaMCP has been configured as an MCP server in Kimi Code.
 |---------|-------|
 | **Command** | `node` |
 | **Script** | `/path/to/VegaMCP/build/index.js` |
-| **Tools** | 60+ tools (full profile) |
+| **Tools** | 65+ tools (full profile) |
 | **Profile** | `full` |
 
 ### Enabled API Keys
@@ -50,7 +50,7 @@ Type:
 You'll see:
 ```
 MCP Servers:
-• REDACTED — 60 tools connected
+• REDACTED — 65+ tools connected
 ```
 
 ### 3. Use Tools Naturally
@@ -80,7 +80,7 @@ Just ask for what you need:
 - `browser` — Playwright automation (navigate, click, screenshot, etc.)
 - `github_scraper` — Repository/code/issue search
 - `web_search` — Tavily AI search
-- `sandbox` — Code execution (Python/JS)
+- `sandbox_testing` — Docker sandbox v5.0 (40 actions, 10 profiles, GPU, Compose)
 - `shell` — Terminal commands
 
 ### 🐝 Agent Swarm
@@ -133,16 +133,17 @@ npm run dev
 
 See `docs/V7_UPGRADE_PLAN.md` for the full cross-agent compatibility roadmap.
 
-### v7.0 Preview: 12 Unified Tools
+### v7.0: 17 Unified Capability Clusters (LIVE)
 
-The upgrade plan includes condensing 60+ tools into **12 core capability clusters**:
+VegaMCP v7.0 condensed 65+ tools into **17 core capability clusters**:
 
-| v6 Tool(s) | v7 Unified Tool |
-|------------|-----------------|
+| v6 Tool(s) | v7 Unified Cluster |
+|------------|--------------------|
 | `browser_*`, `web_search`, `github_scraper` | `web` |
-| `sandbox_execute`, `code_analysis`, `shell`, `filesystem`, `git_tools` | `code` |
+| `sandbox_testing`, `code_analysis`, `shell`, `filesystem`, `git_tools` | `code` |
 | `route_to_reasoning_model`, `knowledge_engine`, `graph_rag` | `ai` |
 | `watcher_*`, `webhook_*`, `workflow_*`, `schedule` | `ops` |
 | `security_scanner`, `sentinel`, `stress_test` | `security` |
+| `sandbox_testing` (v5.0) | 40 actions: exec, install, snapshot, compose, export, GPU |
 
-**Benefits:** ~80% reduction in context usage, faster tool selection, better cross-agent compatibility.
+**Benefits:** ~90% reduction in context usage, faster tool selection, better cross-agent compatibility.

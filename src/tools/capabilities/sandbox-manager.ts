@@ -1,28 +1,16 @@
 /**
- * VegaMCP — Sandbox Manager (v4.0 — Docker-First, Full Lifecycle)
+ * VegaMCP — Sandbox Manager (v5.0 — Docker-First, Full Lifecycle + Security + GPU)
  * 
  * Docker-based sandboxing with specialized containers for each use case.
  * 
- * Primary:   Docker Container — Full Linux sandbox with Xvfb, Python, Node, firejail, Win32 shims
- * Fallback:  V8 Isolate       — Lightweight JS sandbox (no Docker needed)
- *            Directory Jail   — Temp filesystem sandbox
- *            Process Sandbox  — Isolated child process
- *            PowerShell       — Constrained Language Mode execution
- * 
- * v4.0 Additions:
- *   - Package installation (apt/pip/npm) with safety-gated blocklist
- *   - Container snapshots (docker commit → reusable images)
- *   - Port forwarding for web app testing
- *   - Container logs (stream/tail)
- *   - Resource monitoring (CPU/RAM/disk)
- *   - Container diff (filesystem changes since creation)
- *   - Dockerfile generation from install history
- *   - Auto-cleanup TTL (containers auto-destroy after idle timeout)
- *   - Exec with working directory
- *   - Batch exec (run multiple commands sequentially)
- *   - Container pause/unpause/restart
- *   - Package cache volumes (speed up repeated installs)
- *   - Environment variable injection post-create
+ * v5.0 Additions:
+ *   - Security hardening (seccomp, cap-drop ALL, read-only FS, PID limits, non-root)
+ *   - GPU passthrough (NVIDIA --gpus for ML workloads)
+ *   - Docker Compose orchestration (multi-container stacks)
+ *   - Container health checks
+ *   - Workspace mirroring (mount host project into container)
+ *   - Container export/import (.tar for sharing)
+ *   - Security level presets (paranoid/strict/standard/relaxed)
  */
 
 import { execSync, spawn, ChildProcess } from 'child_process';
@@ -80,7 +68,19 @@ export interface ResourceUsage {
   pids: string;
 }
 
-export type DockerProfile = 'gui-test' | 'ocr-test' | 'api-test' | 'security-test' | 'general';
+export type DockerProfile = 
+  | 'gui-test' | 'ocr-test' | 'api-test' | 'security-test' | 'general'     // base profiles
+  | 'webdev' | 'api-dev' | 'mobile-dev' | 'security' | 'data-science'      // v5.0 dev profiles
+  | 'desktop-dev' | 'database' | 'devops' | 'performance' | 'full-qa';     // v5.0 infra profiles
+
+export type SecurityLevel = 'paranoid' | 'strict' | 'standard' | 'relaxed';
+
+const SECURITY_PRESETS: Record<SecurityLevel, { capDrop: string; seccomp: string; readOnly: boolean; noNewPriv: boolean; pidsLimit: number; user?: string }> = {
+  paranoid: { capDrop: 'ALL', seccomp: 'default', readOnly: true, noNewPriv: true, pidsLimit: 64, user: '1000:1000' },
+  strict:   { capDrop: 'ALL', seccomp: 'default', readOnly: false, noNewPriv: true, pidsLimit: 256 },
+  standard: { capDrop: 'ALL', seccomp: 'unconfined', readOnly: false, noNewPriv: false, pidsLimit: 512 },
+  relaxed:  { capDrop: '', seccomp: 'unconfined', readOnly: false, noNewPriv: false, pidsLimit: 0 },
+};
 
 // ============================================================
 // Safety: Package Blocklist
@@ -206,6 +206,12 @@ export function dockerCreate(opts: {
   ports?: Record<number, number>;   // hostPort → containerPort
   ttlMs?: number;                    // auto-destroy after idle
   enablePackageCache?: boolean;      // mount package cache volumes
+  // v5.0 security & hardware
+  securityLevel?: SecurityLevel;     // paranoid/strict/standard/relaxed
+  gpus?: string;                     // 'all', '1', 'device=0,1', etc.
+  workspacePath?: string;            // host path to mirror into container
+  healthCheck?: string;              // health check command
+  image?: string;                    // custom image (for profile-based containers)
 }): SandboxInstance {
   const id = genId();
   const containerName = `vega-sb-${id}`;
@@ -232,7 +238,30 @@ export function dockerCreate(opts: {
     ].join(' ');
   }
 
-  const cmd = `docker run -d --rm ${networkFlag} ${resourceArgs} --name ${containerName} ${volumeArgs} ${envArgs} ${portArgs} ${cacheArgs} ${DOCKER_IMAGE} shell`;
+  // v5.0: Security hardening
+  const secLevel = SECURITY_PRESETS[opts.securityLevel || 'standard'];
+  const securityArgs = [
+    secLevel.capDrop ? `--cap-drop=${secLevel.capDrop}` : '',
+    secLevel.seccomp !== 'unconfined' ? `--security-opt seccomp=default` : '',
+    secLevel.readOnly ? '--read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --tmpfs /run:rw,noexec,nosuid' : '',
+    secLevel.noNewPriv ? '--security-opt no-new-privileges:true' : '',
+    secLevel.pidsLimit > 0 ? `--pids-limit ${secLevel.pidsLimit}` : '',
+    secLevel.user ? `--user ${secLevel.user}` : '',
+  ].filter(Boolean).join(' ');
+
+  // v5.0: GPU passthrough
+  const gpuArgs = opts.gpus ? `--gpus ${opts.gpus}` : '';
+
+  // v5.0: Workspace mirroring
+  const workspaceArgs = opts.workspacePath ? `-v "${opts.workspacePath}:${opts.workspacePath}:rw"` : '';
+
+  // v5.0: Health check
+  const healthArgs = opts.healthCheck ? `--health-cmd="${opts.healthCheck.replace(/"/g, '\\"')}" --health-interval=10s --health-retries=3 --health-start-period=5s` : '';
+
+  // v5.0: Custom image support
+  const imageName = opts.image || DOCKER_IMAGE;
+
+  const cmd = `docker run -d --rm ${networkFlag} ${resourceArgs} ${securityArgs} ${gpuArgs} --name ${containerName} ${volumeArgs} ${envArgs} ${portArgs} ${cacheArgs} ${workspaceArgs} ${healthArgs} ${imageName} shell`;
 
   try {
     const containerId = execSync(cmd, {
@@ -247,6 +276,11 @@ export function dockerCreate(opts: {
         containerName, containerId: containerId.substring(0, 12), profile,
         volumes: opts.volumes || [], network: opts.network || false,
         enablePackageCache: opts.enablePackageCache || false,
+        securityLevel: opts.securityLevel || 'standard',
+        gpus: opts.gpus || null,
+        workspacePath: opts.workspacePath || null,
+        healthCheck: opts.healthCheck || null,
+        image: imageName,
       },
       installHistory: [],
       portMappings,
@@ -975,4 +1009,369 @@ export function getAvailableBackends(): {
     directory: true,
     powershell: os.platform() === 'win32',
   };
+}
+
+// ============================================================
+// v5.0: Container Export/Import (.tar for sharing)
+// ============================================================
+
+export function dockerExportContainer(sandboxId: string, outputPath: string): ExecResult {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') throw new Error('Not a Docker sandbox');
+  const { containerName } = sb.metadata;
+  const start = Date.now();
+  touchSandbox(sandboxId);
+
+  try {
+    const stdout = execSync(
+      `docker export ${containerName} -o "${outputPath}"`,
+      { encoding: 'utf-8', timeout: 300000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    const stat = fs.statSync(outputPath);
+    return { exitCode: 0, stdout: `Exported to ${outputPath} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+export function dockerImportContainer(tarPath: string, imageName: string): ExecResult {
+  const start = Date.now();
+  try {
+    const stdout = execSync(
+      `docker import "${tarPath}" ${imageName}`,
+      { encoding: 'utf-8', timeout: 300000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout: `Imported as ${imageName}: ${stdout}`, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+// ============================================================
+// v5.0: Docker Compose Orchestration
+// ============================================================
+
+export function dockerComposeUp(composePath: string, projectName?: string, timeoutMs = 120000): ExecResult {
+  const start = Date.now();
+  const projectFlag = projectName ? `-p ${projectName}` : '';
+  try {
+    const stdout = execSync(
+      `docker compose -f "${composePath}" ${projectFlag} up -d --wait`,
+      { encoding: 'utf-8', timeout: timeoutMs, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: e.stdout?.toString() || '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+export function dockerComposeDown(composePath: string, projectName?: string, removeVolumes = false): ExecResult {
+  const start = Date.now();
+  const projectFlag = projectName ? `-p ${projectName}` : '';
+  const volFlag = removeVolumes ? '-v' : '';
+  try {
+    const stdout = execSync(
+      `docker compose -f "${composePath}" ${projectFlag} down ${volFlag}`,
+      { encoding: 'utf-8', timeout: 60000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: e.stdout?.toString() || '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+export function dockerComposePs(composePath: string, projectName?: string): ExecResult {
+  const start = Date.now();
+  const projectFlag = projectName ? `-p ${projectName}` : '';
+  try {
+    const stdout = execSync(
+      `docker compose -f "${composePath}" ${projectFlag} ps --format json`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+// ============================================================
+// v5.0: Container Health Status
+// ============================================================
+
+export function dockerHealthStatus(sandboxId: string): { status: string; log: string[] } {
+  const sb = sandboxes.get(sandboxId);
+  if (!sb || sb.type !== 'docker') throw new Error('Not a Docker sandbox');
+  const { containerName } = sb.metadata;
+
+  try {
+    const status = execSync(
+      `docker inspect --format="{{.State.Health.Status}}" ${containerName}`,
+      { encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    const logRaw = execSync(
+      `docker inspect --format="{{range .State.Health.Log}}{{.ExitCode}}:{{.Output}}|||{{end}}" ${containerName}`,
+      { encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    const log = logRaw.split('|||').filter(Boolean).map(l => l.trim());
+    return { status, log };
+  } catch (e: any) {
+    return { status: 'no-healthcheck', log: [`No health check configured or container not found: ${e.message}`] };
+  }
+}
+
+// ============================================================
+// v5.0: GPU Detection
+// ============================================================
+
+export function dockerGpuCheck(): { available: boolean; gpus: any[]; driver?: string; cuda?: string } {
+  try {
+    const nvidiaSmi = execSync('nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv,noheader,nounits', {
+      encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    const gpus = nvidiaSmi.split('\n').map(line => {
+      const [index, name, memory, driver] = line.split(',').map(s => s.trim());
+      return { index: parseInt(index), name, memory_mb: parseInt(memory), driver };
+    });
+
+    // Get CUDA version
+    let cuda = '';
+    try {
+      const output = execSync('nvidia-smi --query-gpu=driver_version --format=csv,noheader', {
+        encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+      cuda = output;
+    } catch {}
+
+    return { available: true, gpus, driver: gpus[0]?.driver, cuda };
+  } catch {
+    return { available: false, gpus: [] };
+  }
+}
+
+// ============================================================
+// v5.0: Custom Docker Networks
+// ============================================================
+
+export function dockerNetworkCreate(name: string, subnet?: string): ExecResult {
+  const start = Date.now();
+  const subnetFlag = subnet ? `--subnet=${subnet}` : '';
+  try {
+    const stdout = execSync(
+      `docker network create ${subnetFlag} ${name}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+export function dockerNetworkRemove(name: string): ExecResult {
+  const start = Date.now();
+  try {
+    const stdout = execSync(
+      `docker network rm ${name}`,
+      { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+    return { exitCode: 0, stdout, stderr: '', duration_ms: Date.now() - start };
+  } catch (e: any) {
+    return { exitCode: e.status || 1, stdout: '', stderr: e.stderr?.toString() || e.message, duration_ms: Date.now() - start };
+  }
+}
+
+// ============================================================
+// v5.0: Generate Docker Compose File
+// ============================================================
+
+export function generateComposeFile(services: Array<{
+  name: string;
+  image: string;
+  ports?: number[];
+  env?: Record<string, string>;
+  volumes?: string[];
+  depends_on?: string[];
+  healthcheck?: string;
+}>): string {
+  const svc: Record<string, any> = {};
+  for (const s of services) {
+    const def: any = { image: s.image, restart: 'unless-stopped' };
+    if (s.ports?.length) def.ports = s.ports.map(p => `${p}:${p}`);
+    if (s.env && Object.keys(s.env).length) def.environment = s.env;
+    if (s.volumes?.length) def.volumes = s.volumes;
+    if (s.depends_on?.length) def.depends_on = s.depends_on;
+    if (s.healthcheck) {
+      def.healthcheck = { test: ['CMD-SHELL', s.healthcheck], interval: '10s', timeout: '5s', retries: 3 };
+    }
+    svc[s.name] = def;
+  }
+
+  // Simple YAML generator (no dependency needed)
+  const lines: string[] = ['services:'];
+  for (const [name, def] of Object.entries(svc)) {
+    lines.push(`  ${name}:`);
+    lines.push(`    image: ${def.image}`);
+    if (def.restart) lines.push(`    restart: ${def.restart}`);
+    if (def.ports) {
+      lines.push('    ports:');
+      for (const p of def.ports) lines.push(`      - "${p}"`);
+    }
+    if (def.environment) {
+      lines.push('    environment:');
+      for (const [k, v] of Object.entries(def.environment)) lines.push(`      ${k}: "${v}"`);
+    }
+    if (def.volumes) {
+      lines.push('    volumes:');
+      for (const v of def.volumes) lines.push(`      - ${v}`);
+    }
+    if (def.depends_on) {
+      lines.push('    depends_on:');
+      for (const d of def.depends_on) lines.push(`      - ${d}`);
+    }
+    if (def.healthcheck) {
+      lines.push('    healthcheck:');
+      lines.push(`      test: ["CMD-SHELL", "${def.healthcheck.test[1]}"]`);
+      lines.push(`      interval: ${def.healthcheck.interval}`);
+      lines.push(`      timeout: ${def.healthcheck.timeout}`);
+      lines.push(`      retries: ${def.healthcheck.retries}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+// ============================================================
+// AUTO-ROUTING: Smart Docker Isolation for Dangerous Operations
+// ============================================================
+
+/**
+ * Mapping of tool+action → Docker profile for auto-routing.
+ * Returns the recommended profile, or null if the action should run on host.
+ */
+export function autoRouteDecision(tool: string, action: string): DockerProfile | null {
+  const routes: Record<string, Record<string, DockerProfile>> = {
+    security_testing: {
+      dast_scan: 'security',
+      penetration_test: 'security',
+      dependency_audit: 'security',
+      fuzzing: 'security',
+    },
+    server_testing: {
+      port_scan: 'api-dev',
+      load_test: 'api-dev',
+      ping_test: 'api-dev',
+      load_balancer_check: 'api-dev',
+    },
+    advanced_testing: {
+      fuzz_test: 'performance',
+      concurrent_stress: 'performance',
+      disk_benchmark: 'performance',
+      chaos_test: 'performance',
+    },
+    api_testing: {
+      mock_server: 'api-dev',
+      load_test: 'api-dev',
+    },
+    database_testing: {
+      stress_test: 'database',
+      injection_test: 'database',
+    },
+  };
+  return routes[tool]?.[action] ?? null;
+}
+
+/**
+ * runIsolated — Execute a command in a Docker container, auto-managed lifecycle.
+ * 
+ * 1. Creates a sandbox with the specified profile
+ * 2. Optionally copies files in
+ * 3. Executes the command
+ * 4. Captures output
+ * 5. Destroys the sandbox
+ * 
+ * Falls back to host execution if Docker is unavailable.
+ */
+export function runIsolated(opts: {
+  profile: DockerProfile;
+  command: string;
+  timeoutMs?: number;
+  securityLevel?: SecurityLevel;
+  network?: boolean;
+  copyIn?: { hostPath: string; containerPath: string }[];
+  env?: Record<string, string>;
+  fallbackToHost?: boolean;  // default true
+}): { stdout: string; stderr: string; exitCode: number; isolated: boolean; duration_ms: number } {
+  const start = Date.now();
+  const timeout = opts.timeoutMs ?? 30000;
+  const fallback = opts.fallbackToHost !== false;
+
+  // Check Docker availability
+  if (!isDockerAvailable()) {
+    if (fallback) {
+      // Fall back to host execution with warning
+      try {
+        const stdout = execSync(opts.command, {
+          encoding: 'utf-8',
+          timeout,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+        }).trim();
+        return { stdout, stderr: '', exitCode: 0, isolated: false, duration_ms: Date.now() - start };
+      } catch (e: any) {
+        return {
+          stdout: e.stdout?.toString().trim() || '',
+          stderr: e.stderr?.toString().trim() || e.message,
+          exitCode: e.status ?? 1,
+          isolated: false,
+          duration_ms: Date.now() - start,
+        };
+      }
+    }
+    return { stdout: '', stderr: 'Docker not available and fallbackToHost=false', exitCode: 1, isolated: false, duration_ms: Date.now() - start };
+  }
+
+  // Create Docker container
+  let sb;
+  try {
+    sb = dockerCreate({
+      name: `iso-${opts.profile}-${Date.now()}`,
+      profile: opts.profile,
+      network: opts.network ?? false,
+      securityLevel: opts.securityLevel ?? 'strict',
+      env: opts.env,
+    });
+  } catch (e: any) {
+    if (fallback) {
+      try {
+        const stdout = execSync(opts.command, { encoding: 'utf-8', timeout, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }).trim();
+        return { stdout, stderr: '', exitCode: 0, isolated: false, duration_ms: Date.now() - start };
+      } catch (err: any) {
+        return { stdout: err.stdout?.toString().trim() || '', stderr: err.stderr?.toString().trim() || err.message, exitCode: err.status ?? 1, isolated: false, duration_ms: Date.now() - start };
+      }
+    }
+    return { stdout: '', stderr: `Docker create failed: ${e.message}`, exitCode: 1, isolated: false, duration_ms: Date.now() - start };
+  }
+
+  try {
+    // Copy files in if needed
+    if (opts.copyIn) {
+      for (const cp of opts.copyIn) {
+        dockerCopyIn(sb.id, cp.hostPath, cp.containerPath);
+      }
+    }
+
+    // Execute command
+    const result = dockerExec(sb.id, opts.command, timeout);
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      isolated: true,
+      duration_ms: Date.now() - start,
+    };
+  } finally {
+    // Always cleanup
+    try { dockerDestroy(sb.id); } catch {}
+  }
 }
