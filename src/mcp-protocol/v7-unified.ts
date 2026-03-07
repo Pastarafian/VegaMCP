@@ -7,57 +7,62 @@ export function getV7Tools() {
     v6Map.set(t.schema.name, t);
   }
 
-  // OMNI-CLUSTERS: Super-condensed mega tools that combine all logic
+  // OMNI-CLUSTERS: Super-condensed mega tools — ALL tools mapped, zero leaks
   const clusters = [
     {
       name: "omni_assistant",
-      description: "Core intelligence and utility cluster: ai, budget, update, prompt library, web search, code analysis, document reader, sequential thinking, expert_toolkits.",
+      description: "Core AI intelligence: reasoning, budget, auto-update, prompts, web search (speed/balanced/quality modes + domain filter), code analysis, docs, sequential thinking, expert toolkits, knowledge engine, memory graph, semantic memory (vector search), context7 library docs.",
       tools: [
         'route_to_reasoning_model', 'token_budget', 'auto_update', 'prompt_library', 
-        'web_search', 'github_scraper', 'code_analysis', 'sequential_thinking',
-        'document_reader', 'elicit', 'knowledge_engine', 'memory', 'expert_toolkits'
+        'web_search', 'github_scraper', 'code_analysis', 'vegamcp_sequential_thinking',
+        'vegamcp_document_reader', 'elicit', 'knowledge_engine', 'memory', 'expert_toolkits',
+        'context7_docs', 'semantic_memory'
       ]
     },
     {
       name: "omni_swarm",
-      description: "Agent orchestration cluster: swarm operations, agent intelligence, agent ops, a2a_protocol, agent graphs, agentic sampling, multidomdal, session_manager.",
+      description: "Agent orchestration: swarm ops, agent intel/ops, A2A protocol, agent graphs, agentic sampling, multimodal embeddings, session manager, MCP relay.",
       tools: [
         'swarm', 'agent_intel', 'agent_ops', 'a2a_protocol', 'agent_graphs', 
-        'agentic_sampling_v2', 'multimodal_embeddings', 'session_manager'
+        'agentic_sampling_v2', 'multimodal_embeddings', 'session_manager', 'mcp_relay'
       ]
     },
     {
       name: "omni_automation",
-      description: "Action cluster: browser control, workflow execution, filesystem, shell, git, mcp_tasks, api_request, sentinel, ab_test.",
+      description: "Action & control: browser, workflow, filesystem, shell, git, MCP tasks, API requests, sandbox, watchers, webhooks, schedule, notify, the_claw, claw_command_center, ide_autoclicker, vps_control, image_generation.",
       tools: [
-        'browser', 'workflow_execute', 'filesystem', 'git_tools', 'shell', 
-        'mcp_tasks', 'api_request', 'sandbox_execute', 'watcher', 'webhook', 'schedule', 'notify'
+        'browser', 'workflow_execute', 'vegamcp_filesystem', 'vegamcp_git', 'vegamcp_shell', 
+        'mcp_tasks', 'api_request', 'sandbox_testing', 'watcher', 'webhook', 
+        'schedule_task', 'notify', 'the_claw', 'claw_command_center', 
+        'ide_autoclicker', 'vps_control', 'image_generation'
       ]
     },
     {
       name: "omni_systems",
-      description: "Infrastructure cluster: database, health check, analytics, skills, seed data, sentry, oauth, gateway, tool_search.",
+      description: "Infrastructure: database, postgres_client, health check, analytics, skills, seed data, sentry, OAuth, gateway, tool search, MCP apps, vault, dynamic indexing.",
       tools: [
-        'database', 'health_check', 'analytics', 'skills', 'seed_data', 
-        'sentry', 'oauth_manage', 'gateway', 'tool_search', 'mcp_apps'
+        'vegamcp_database', 'vegamcp_health_check', 'vegamcp_analytics', 'vegamcp_skills', 'vegamcp_seed_data', 
+        'sentry', 'oauth_manage', 'gateway', 'tool_search', 'mcp_apps',
+        'vegamcp_vault', 'dynamic_indexing', 'postgres_client'
       ]
     },
     {
       name: "omni_research",
-      description: "Research & Science cluster: graph rag, self evolution, hypothesis gen, quality gate, synthesis engine, tool discovery.",
+      description: "Research & Science: graph RAG, agentic RAG, self evolution, hypothesis gen, quality gate, synthesis engine, LLM router, memory bridge, tool discovery, sentinel, LLM output evaluation.",
       tools: [
-        'graph_rag', 'agentic_rag', 'self_evolution', 'hypothesis_gen', 
-        'quality_gate', 'synthesis_engine', 'llm_router', 'memory_bridge', 'tool_discovery'
+        'graph_rag', 'agentic_rag', 'self_evolution', 'hypothesis_generator', 
+        'quality_gate', 'synthesis_engine', 'llm_router', 'memory_bridge', 
+        'tool_discovery', 'sentinel', 'llm_eval'
       ]
     },
     {
       name: "omni_testing",
-      description: "Automated QA and Security cluster: mobile, web, api, db, server, desktop, accessibility, security, visual, stress, design.",
+      description: "QA & Security: mobile, web, API, DB, server, desktop, accessibility, security, visual, advanced testing, security scanner, stress test, zero trust.",
       tools: [
         'mobile_testing', 'web_testing', 'api_testing', 'accessibility', 
         'desktop_testing', 'advanced_testing', 'database_testing', 
         'server_testing', 'security_testing', 'visual_testing',
-        'security_scanner', 'stress_test', 'zero_trust', 'vault'
+        'security_scanner', 'stress_test', 'zero_trust'
       ]
     }
   ];

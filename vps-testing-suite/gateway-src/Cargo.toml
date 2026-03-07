@@ -1,0 +1,27 @@
+[package]
+name = "vega-gateway"
+version = "2.0.0"
+edition = "2021"
+authors = ["VegaMCP Team"]
+description = "VegaSentinel: NT_AUTHORITY SYSTEM Gateway + CUA Vision Engine"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base64 = "0.22"
+
+# Windows-specific dependencies
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+    "winuser", "psapi", "handleapi", "processthreadsapi",
+    "securitybaseapi", "winbase", "winnt", "wingdi",
+    "windef", "libloaderapi", "errhandlingapi",
+    "tlhelp32"  # For process enumeration
+] }

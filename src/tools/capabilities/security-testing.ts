@@ -19,6 +19,7 @@ import https from 'https';
 import http from 'http';
 import { URL } from 'url';
 import { execSync } from 'child_process';
+import { autoRouteDecision, runIsolated } from './sandbox-manager.js';
 
 export const securityTestingSchema = {
   name: 'security_testing',
@@ -346,17 +347,34 @@ export async function handleSecurityTesting(args: any): Promise<{ content: Array
           const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
           const depCount = Object.keys(allDeps).length;
 
-          // Try running npm audit
+          // Run npm audit — Docker-isolated when available
           let auditText = '';
-          try {
-            auditText = execSync('npm audit --json 2>/dev/null || npm audit --json 2>nul', {
-              encoding: 'utf-8',
-              cwd: targetPath,
-              timeout: 30000,
-              windowsHide: true,
+          const dockerProfile = autoRouteDecision('security_testing', 'dependency_audit');
+          if (dockerProfile) {
+            // Run npm audit inside isolated container
+            const result = runIsolated({
+              profile: dockerProfile,
+              command: 'cd /workspace && npm audit --json 2>/dev/null || true',
+              timeoutMs: 30000,
+              network: true, // npm audit needs network
+              securityLevel: 'strict',
+              copyIn: [
+                { hostPath: packageJsonPath, containerPath: '/workspace/package.json' },
+                ...(fs.existsSync(path.join(targetPath, 'package-lock.json'))
+                  ? [{ hostPath: path.join(targetPath, 'package-lock.json'), containerPath: '/workspace/package-lock.json' }]
+                  : []),
+              ],
             });
-          } catch (e: any) {
-            auditText = e.stdout || '';
+            auditText = result.stdout || '';
+          } else {
+            // Fallback: host execution
+            try {
+              auditText = execSync('npm audit --json 2>/dev/null || npm audit --json 2>nul', {
+                encoding: 'utf-8', cwd: targetPath, timeout: 30000, windowsHide: true,
+              });
+            } catch (e: any) {
+              auditText = e.stdout || '';
+            }
           }
 
           let auditData: any = null;

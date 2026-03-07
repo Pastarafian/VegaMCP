@@ -85,3 +85,24 @@ temp/
 # SearXNG local instance (dev-only)
 searxng-data/
 docker-compose*.yml
+
+# The Claw — workspace data (NEVER commit)
+.claw-memory/
+.theclaw-ledger.json
+.theclaw-workflows/
+theclaw-live.log
+whatsapp-auth/
+baileys_auth_info/
+
+# Tauri build artifacts
+claw-control-panel/src-tauri/target/
+claw-control-panel/dist/
+
+# Any auth/credential stores
+auth_store/
+*.pem
+*.key
+*.cert
+*.p12
+credentials.json
+token.json

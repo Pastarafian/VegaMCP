@@ -81,8 +81,7 @@ import { swarmBroadcastSchema, handleSwarmBroadcast } from './tools/swarm/broadc
 import { swarmGetMetricsSchema, handleSwarmGetMetrics } from './tools/swarm/get-metrics.js';
 import { swarmRegisterTriggerSchema, handleSwarmRegisterTrigger, swarmRunPipelineSchema, handleSwarmRunPipeline } from './tools/swarm/triggers-pipeline.js';
 
-// --- Capabilities Tools ---
-import { sandboxExecuteSchema, handleSandboxExecute } from './tools/capabilities/sandbox.js';
+// --- Capabilities Tools --- (sandbox_execute removed — superseded by sandbox_testing v5.0)
 import { apiRequestSchema, handleApiRequest } from './tools/capabilities/api-gateway.js';
 import { watcherCreateSchema, handleWatcherCreate, watcherListSchema, handleWatcherList, watcherDeleteSchema, handleWatcherDelete, closeAllWatchers } from './tools/capabilities/watchers.js';
 import { webhookCreateSchema, handleWebhookCreate, webhookListSchema, handleWebhookList, webhookDeleteSchema, handleWebhookDelete, webhookTestSchema, handleWebhookTest } from './tools/capabilities/webhooks.js';
@@ -129,6 +128,21 @@ import { serverTestingSchema, handleServerTesting } from './tools/capabilities/s
 import { securityTestingSchema, handleSecurityTesting } from './tools/capabilities/security-testing.js';
 import { visualTestingSchema, handleVisualTesting } from './tools/capabilities/visual-testing.js';
 import { sandboxTestingSchema, handleSandboxTesting } from './tools/capabilities/sandbox-testing.js';
+
+// --- MCP-to-MCP Relay ---
+import { mcpRelaySchema, handleMCPRelay } from './tools/capabilities/mcp-relay.js';
+
+// --- VegaClaw: Multi-Agent Visual Orchestrator ---
+import { theClawSchema, handleTheClaw } from './tools/capabilities/the-claw.js';
+
+// --- VegaClaw: Command Center API Bridge ---
+import { clawBridgeSchema, handleClawBridge } from './tools/capabilities/claw-bridge.js';
+
+// --- VegaClaw: IDE AutoClicker ---
+import { ideAutoClickerSchema, handleIDEAutoClicker } from './tools/capabilities/ide-autoclicker.js';
+
+// --- VegaClaw: Direct VPS Control ---
+import { vpsControlSchema, handleVPSControl } from './tools/capabilities/vps-control.js';
 
 // --- v3.2 Seed Data (PolyAlgo, EasyPrompts, BugTaxonomy) ---
 import { seedDataSchema, handleSeedData, autoSeed } from './seed/seed-runner.js';
@@ -188,6 +202,15 @@ import { multimodalSchema, handleMultimodal } from './mcp-protocol/multimodal-em
 import { dynamicIndexingSchema, handleDynamicIndexing, startAutoProcessing } from './mcp-protocol/dynamic-indexing.js';
 import { zeroTrustSchema, handleZeroTrust } from './mcp-protocol/zero-trust.js';
 
+// --- v7.1 New Tools ---
+import { getContext7Tools } from './tools/capabilities/context7-docs.js';
+import { getPostgresTools } from './tools/capabilities/postgres-client.js';
+import { getImageGenTools } from './tools/capabilities/image-gen.js';
+
+// --- v7.2 New Tools ---
+import { llmEvalSchema, handleLLMEval } from './tools/capabilities/llm-eval.js';
+import { semanticMemorySchema, handleSemanticMemory } from './tools/capabilities/semantic-memory.js';
+
 // ============================================================
 // Tool Profile System (Lazy Loading)
 // ============================================================
@@ -219,7 +242,20 @@ const server = new Server(
       logging: {},        // MCP Structured Logging
       completions: {},    // MCP Autocomplete
     },
-    instructions: 'VegaMCP v6.0 — AI-native MCP server with memory, browser, swarm, research, A2A protocol, MCP Apps (UI), agent graphs, zero-trust identity, gateway security, async tasks (SEP-1686), multimodal embeddings, and agentic sampling v2. Use tool_search to discover tools, graph_rag for retrieval, llm_router for multi-model routing, a2a_protocol for agent communication.',
+    instructions: `VegaMCP v7.0 — AI-native MCP server. 65+ tools in 17 unified clusters.
+
+PREFER MCP TOOLS OVER IDE TOOLS to minimize token usage:
+• Use vegamcp_shell instead of IDE run_command — captures output internally
+• Use vegamcp_filesystem (read_file/write_file/search_files) instead of IDE view_file/grep_search — returns structured data, supports batch reads via read_multiple
+• Use code_analysis instead of manual grep for function/class/import extraction — instant structured AST output
+• Use vegamcp_git instead of IDE git commands — structured JSON output, no parsing needed
+• Use vegamcp_database for CSV/JSON/SQLite queries — SQL on files without scripts
+• Use vegamcp_document_reader for batch document reading — read multiple files in one call
+• Use sequential_thinking for complex multi-step reasoning — saves context by offloading chain-of-thought
+• Use graph_rag for codebase knowledge retrieval — avoids re-scanning files
+• Use sandbox_testing for code execution — Docker-isolated with 40 actions and 10 profiles
+
+KEY TOOLS: tool_search (discover capabilities), graph_rag (retrieval), llm_router (multi-model), a2a_protocol (agent communication), sandbox_testing (Docker v5.0).`,
   }
 );
 
@@ -290,6 +326,11 @@ const TOOL_ANNOTATIONS: Record<string, {
   server_testing: { title: 'Server / Infrastructure Testing', readOnlyHint: false, openWorldHint: true },
   security_testing: { title: 'Deep Security Scans', readOnlyHint: true, openWorldHint: true },
   visual_testing: { title: 'Advanced Visual & GUI Testing', readOnlyHint: true, openWorldHint: true },
+  mcp_relay: { title: 'MCP-to-MCP Agent Relay', readOnlyHint: false },
+  the_claw: { title: 'VegaClaw Multi-Agent Visual Orchestrator', readOnlyHint: false, openWorldHint: true },
+  claw_command_center: { title: 'VegaClaw Command Center Bridge', readOnlyHint: false, openWorldHint: true },
+  ide_autoclicker: { title: 'VegaClaw IDE AutoClicker', readOnlyHint: false, openWorldHint: false },
+  vps_control: { title: 'VegaClaw VPS Direct Control', readOnlyHint: false, openWorldHint: true },
 };
 
 // ============================================================
@@ -595,12 +636,7 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: swarmSchema, handler: handleSwarmDispatch });
   }
 
-  // ═══════════════════════════════════════════
-  // CAPABILITIES — profile-gated
-  // ═══════════════════════════════════════════
-  if (profile === 'full' || profile === 'coding') {
-    tools.push({ schema: sandboxExecuteSchema, handler: handleSandboxExecute });
-  }
+  // sandbox_execute removed — sandbox_testing v5.0 (40 actions) in the testing suite section below
 
   if (profile === 'full' || profile === 'ops') {
     tools.push({ schema: apiRequestSchema, handler: handleApiRequest });
@@ -647,6 +683,11 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: securityTestingSchema, handler: handleSecurityTesting });
     tools.push({ schema: visualTestingSchema, handler: handleVisualTesting });
     tools.push({ schema: sandboxTestingSchema, handler: handleSandboxTesting });
+    tools.push({ schema: mcpRelaySchema, handler: handleMCPRelay });
+    tools.push({ schema: theClawSchema, handler: handleTheClaw });
+    tools.push({ schema: clawBridgeSchema, handler: handleClawBridge });
+    tools.push({ schema: ideAutoClickerSchema, handler: handleIDEAutoClicker });
+    tools.push({ schema: vpsControlSchema, handler: handleVPSControl });
   }
 
   // ═══════════════════════════════════════════
@@ -703,6 +744,19 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
   tools.push({ schema: multimodalSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleMultimodal(args) }] }) });
   tools.push({ schema: dynamicIndexingSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleDynamicIndexing(args) }] }) });
   tools.push({ schema: zeroTrustSchema, handler: async (args: any) => ({ content: [{ type: 'text', text: handleZeroTrust(args) }] }) });
+
+  // ═══════════════════════════════════════════
+  // v7.1 — Context7, PostgreSQL, Image Gen
+  // ═══════════════════════════════════════════
+  for (const tool of getContext7Tools()) tools.push(tool);
+  for (const tool of getPostgresTools()) tools.push(tool);
+  for (const tool of getImageGenTools()) tools.push(tool);
+
+  // ═══════════════════════════════════════════
+  // v7.2 — LLM Eval, Semantic Memory
+  // ═══════════════════════════════════════════
+  tools.push({ schema: llmEvalSchema, handler: handleLLMEval });
+  tools.push({ schema: semanticMemorySchema, handler: handleSemanticMemory });
 
   return tools;
 }

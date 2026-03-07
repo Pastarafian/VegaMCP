@@ -15,6 +15,7 @@
 import net from 'net';
 import os from 'os';
 import { execSync } from 'child_process';
+import { autoRouteDecision, runIsolated } from './sandbox-manager.js';
 import { URL } from 'url';
 import https from 'https';
 import http from 'http';
@@ -465,11 +466,19 @@ export async function handleServerTesting(args: any): Promise<{ content: Array<{
       const count = 4;
 
       try {
-        const cmd = platform === 'win32'
+        // Use Docker isolation for network operations when available
+        const profile = autoRouteDecision('server_testing', 'ping_test');
+        const pingCmd = platform === 'win32'
           ? `ping -n ${count} ${host}`
           : `ping -c ${count} ${host}`;
-        
-        const output = execSync(cmd, { encoding: 'utf-8', timeout: 15000, windowsHide: true }).trim();
+
+        let output: string;
+        if (profile) {
+          const result = runIsolated({ profile, command: `ping -c ${count} ${host}`, timeoutMs: 15000, network: true, securityLevel: 'standard' });
+          output = result.stdout;
+        } else {
+          output = execSync(pingCmd, { encoding: 'utf-8', timeout: 15000, windowsHide: true }).trim();
+        }
         
         // Parse ping statistics
         const latencies: number[] = [];

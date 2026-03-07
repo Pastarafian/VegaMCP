@@ -1,14 +1,15 @@
 /**
- * VegaMCP — Sandbox Testing Tool (v4.0 — Docker-First, Full Lifecycle)
+ * VegaMCP — Sandbox Testing Tool (v5.0 — Docker-First, Full Lifecycle + Profile Engine)
  * 
- * Docker-based sandboxing with specialized container profiles.
+ * Docker-based sandboxing with purpose-built container profiles.
+ * 10 dev/test profiles: webdev, api-dev, mobile-dev, security, data-science,
+ *   desktop-dev, database, devops, performance, full-qa.
+ * Can auto-start Docker Desktop on Windows/macOS/Linux.
  * Fallbacks: V8 isolate, process sandbox, directory jail.
- * 
- * v4.0: Package install, snapshot, logs, stats, diff, Dockerfile gen,
- *       batch exec, pause/unpause/restart, port forwarding, env injection, TTL auto-cleanup.
  */
 
 import path from 'path';
+import os from 'os';
 import {
   getAvailableBackends, listSandboxes, getSandbox, destroyAllSandboxes,
   isDockerAvailable, isDockerImageBuilt, dockerBuildImage,
@@ -17,17 +18,28 @@ import {
   dockerInstallPackages, dockerSnapshot, dockerLogs, dockerStats, dockerDiff,
   dockerPause, dockerUnpause, dockerRestart, dockerBatchExec,
   dockerSetEnv, dockerGetPorts, generateDockerfile,
+  // v5.0
+  dockerExportContainer, dockerImportContainer,
+  dockerComposeUp, dockerComposeDown, dockerComposePs,
+  dockerHealthStatus, dockerGpuCheck,
+  dockerNetworkCreate, dockerNetworkRemove,
+  generateComposeFile,
   processCreate, processExec, processDestroy,
   vmExecute,
   directoryCreate, directoryExec, directoryWriteFile, directoryReadFile,
   directoryListFiles, directoryGetSize, directoryDestroy,
   powershellExec,
-  DockerProfile,
+  DockerProfile, SecurityLevel,
 } from './sandbox-manager.js';
+import {
+  listProfiles, getProfile, getProfileForCategories,
+  generateProfileDockerfile, buildProfileImage, isProfileBuilt,
+  startDockerDesktop, waitForDocker,
+} from './docker-profiles.js';
 
 export const sandboxTestingSchema = {
   name: 'sandbox_testing',
-  description: `Docker-first sandbox manager with specialized container profiles. Primary: Docker containers with Xvfb virtual display, Python, Node.js, firejail sub-sandboxes, and Win32 API shims. Profiles: gui-test (visual/autoclicker testing), ocr-test (OCR pipeline), api-test (backend testing), security-test (secret scanning), general. Fallbacks: V8 isolate for JS eval, process sandbox, directory jail. Actions: status, create, exec, docker_run, docker_build, docker_copy, vm_run, ps_exec, write_file, read_file, list_files, destroy, destroy_all, list, install, snapshot, logs, stats, diff, dockerfile, batch_exec, pause, unpause, restart, set_env, ports.`,
+  description: `Docker-first sandbox manager v5.0 with security hardening, GPU passthrough, Docker Compose orchestration, and 10 dev profiles. Security levels: paranoid/strict/standard/relaxed. GPU: NVIDIA passthrough for ML. Compose: multi-container stacks. Export/import containers as .tar. Health checks. Custom networks. Actions: status, create, exec, docker_run, docker_build, docker_copy, vm_run, ps_exec, write_file, read_file, list_files, destroy, destroy_all, list, install, snapshot, logs, stats, diff, dockerfile, batch_exec, pause, unpause, restart, set_env, ports, docker_start, list_profiles, get_profile, build_profile, create_from_profile, export, import, compose_up, compose_down, compose_status, health_check, gpu_check, network_create, network_remove.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -40,13 +52,22 @@ export const sandboxTestingSchema = {
           // v4.0 actions
           'install', 'snapshot', 'logs', 'stats', 'diff', 'dockerfile',
           'batch_exec', 'pause', 'unpause', 'restart', 'set_env', 'ports',
+          // v5.0 profile engine + docker start
+          'docker_start', 'list_profiles', 'get_profile', 'build_profile', 'create_from_profile',
+          // v5.0 security, GPU, compose, export/import, health, network
+          'export', 'import', 'compose_up', 'compose_down', 'compose_status',
+          'health_check', 'gpu_check', 'network_create', 'network_remove',
         ],
         description: 'Sandbox action',
       },
       sandbox_id: { type: 'string', description: 'Sandbox instance ID' },
       // Docker options
       backend: { type: 'string', enum: ['docker', 'process', 'directory'], description: 'Sandbox backend (default: docker)' },
-      profile: { type: 'string', enum: ['gui-test', 'ocr-test', 'api-test', 'security-test', 'general'], description: 'Docker sandbox profile' },
+      profile: { type: 'string', enum: ['gui-test', 'ocr-test', 'api-test', 'security-test', 'general'], description: 'Docker sandbox profile (legacy)' },
+      // v5.0: Dev profiles
+      profile_id: { type: 'string', enum: ['webdev', 'api-dev', 'mobile-dev', 'security', 'data-science', 'desktop-dev', 'database', 'devops', 'performance', 'full-qa'], description: 'Dev profile ID (for create_from_profile, build_profile, get_profile)' },
+      categories: { type: 'array', items: { type: 'string' }, description: 'Categories to auto-match a profile (e.g. ["web", "frontend"])' },
+      wait_for_docker: { type: 'boolean', description: 'Wait for Docker to fully start (docker_start)', default: true },
       volumes: { type: 'array', items: { type: 'string' }, description: 'Docker volume mounts (host:container:mode)' },
       network: { type: 'boolean', description: 'Enable network in Docker (default: false)', default: false },
       // Docker copy
@@ -88,6 +109,26 @@ export const sandboxTestingSchema = {
       ttl_ms: { type: 'number', description: 'Auto-destroy after idle timeout in ms (0 = disabled, for create)' },
       // v4.0: Package cache
       enable_package_cache: { type: 'boolean', description: 'Mount package cache volumes for faster repeated installs (for create)', default: false },
+      // v5.0: Security
+      security_level: { type: 'string', enum: ['paranoid', 'strict', 'standard', 'relaxed'], description: 'Container security level (default: standard)', default: 'standard' },
+      // v5.0: GPU
+      gpus: { type: 'string', description: 'GPU access ("all", "1", "device=0,1") for NVIDIA GPU passthrough' },
+      // v5.0: Workspace
+      workspace_path: { type: 'string', description: 'Host path to mirror into container at the same path' },
+      // v5.0: Health
+      health_check: { type: 'string', description: 'Health check command (e.g. "curl -f http://localhost:3000 || exit 1")' },
+      // v5.0: Compose
+      compose_file: { type: 'string', description: 'Path to docker-compose.yml (for compose_up/down/status)' },
+      compose_services: { type: 'array', description: 'Service definitions for auto-generating compose file' },
+      project_name: { type: 'string', description: 'Docker Compose project name' },
+      remove_volumes: { type: 'boolean', description: 'Remove volumes on compose_down', default: false },
+      // v5.0: Export/import
+      output_path: { type: 'string', description: 'Output file path (for export action)' },
+      image_name: { type: 'string', description: 'Image name (for import action)' },
+      tar_path: { type: 'string', description: 'Path to .tar file (for import action)' },
+      // v5.0: Network
+      network_name: { type: 'string', description: 'Docker network name (for network_create/remove)' },
+      subnet: { type: 'string', description: 'Network subnet (e.g. "172.28.0.0/16")' },
     },
     required: ['action'],
   },
@@ -139,17 +180,26 @@ export async function handleSandboxTesting(args: any): Promise<{ content: Array<
             '🚀 Batch exec (sequential commands)',
             '🔧 Post-create env var injection',
             '💾 Package cache volumes',
+            // v5.0
+            '🔒 Security levels (paranoid/strict/standard/relaxed)',
+            '🎮 NVIDIA GPU passthrough (--gpus)',
+            '🐙 Docker Compose orchestration (multi-container stacks)',
+            '❤️ Container health checks',
+            '📂 Workspace mirroring (host ↔ container)',
+            '📤 Container export/import (.tar)',
+            '🌐 Custom Docker networks',
           ],
         },
+        dev_profiles: listProfiles().map(p => ({ id: p.id, name: p.name, categories: p.categories })),
         setup_hints: {
-          ...(!backends.docker ? { docker: 'Install Docker Desktop from https://docker.com' } : {}),
+          ...(!backends.docker ? { docker: 'Install Docker Desktop or use "docker_start" to auto-launch it' } : {}),
           ...(!backends.docker_image && backends.docker ? { build: 'Use action "docker_build" or run: docker build -t vega-sandbox:latest docker_sandbox/' } : {}),
         },
         ai_hint: backends.docker && backends.docker_image
-          ? 'Docker sandbox v4.0 ready. New actions: install (packages), snapshot, logs, stats, diff, dockerfile, batch_exec, pause/unpause/restart, set_env, ports.'
+          ? 'Docker sandbox v5.0 ready. 10 dev profiles available. Try: list_profiles, create_from_profile, docker_start, install, snapshot, batch_exec.'
           : backends.docker
             ? 'Docker available but image not built. Use "docker_build" first.'
-            : 'Docker not available. Use "create" with backend "process" or "directory" as fallback.',
+            : 'Docker not available. Use "docker_start" to auto-launch Docker Desktop, or "create" with backend "process"/"directory" as fallback.',
       });
     }
 
@@ -171,6 +221,12 @@ export async function handleSandboxTesting(args: any): Promise<{ content: Array<
             ports: args.ports,
             ttlMs: args.ttl_ms,
             enablePackageCache: args.enable_package_cache,
+            // v5.0
+            securityLevel: args.security_level,
+            gpus: args.gpus,
+            workspacePath: args.workspace_path,
+            healthCheck: args.health_check,
+            image: args.image_name,
           });
           return ok({
             action: 'create', sandbox_id: sb.id, type: 'docker',
@@ -527,7 +583,269 @@ export async function handleSandboxTesting(args: any): Promise<{ content: Array<
       });
     }
 
+    // ── v5.0: Start Docker Desktop ──────────────────────────────
+    case 'docker_start': {
+      const result = startDockerDesktop();
+      if (result.alreadyRunning) {
+        return ok({
+          action: 'docker_start', ...result,
+          ai_hint: 'Docker is already running. You can proceed with creating sandboxes.',
+        });
+      }
+      if (result.success && args.wait_for_docker !== false) {
+        const ready = waitForDocker(60000);
+        return ok({
+          action: 'docker_start', ...result,
+          docker_ready: ready,
+          ai_hint: ready
+            ? 'Docker is now running and ready. You can create sandboxes.'
+            : 'Docker was started but is not yet responding. Try again in 30 seconds.',
+        });
+      }
+      if (result.success) {
+        return ok({
+          action: 'docker_start', ...result,
+          ai_hint: 'Docker start command sent. Use "status" to check when it\'s ready.',
+        });
+      }
+      return fail('DOCKER_START_FAILED', result.message);
+    }
+
+    // ── v5.0: List all profiles ────────────────────────────────
+    case 'list_profiles': {
+      const profiles = listProfiles();
+      // Auto-match if categories provided
+      let recommended: string | null = null;
+      if (args.categories && Array.isArray(args.categories)) {
+        const match = getProfileForCategories(args.categories);
+        if (match) recommended = match.id;
+      }
+      return ok({
+        action: 'list_profiles',
+        count: profiles.length,
+        profiles,
+        recommended,
+        ai_hint: `${profiles.length} profiles available. Use 'get_profile' to see details/Dockerfile, 'build_profile' to build the image, 'create_from_profile' to spin up a sandbox.`,
+      });
+    }
+
+    // ── v5.0: Get profile details ──────────────────────────────
+    case 'get_profile': {
+      const profileId = args.profile_id;
+      if (!profileId) return fail('MISSING_PARAM', 'profile_id required');
+      const profile = getProfile(profileId);
+      if (!profile) return fail('NOT_FOUND', `Profile '${profileId}' not found. Use 'list_profiles' to see available profiles.`);
+      const dockerfile = generateProfileDockerfile(profileId);
+      const built = isDockerAvailable() ? isProfileBuilt(profileId) : false;
+      return ok({
+        action: 'get_profile',
+        profile: {
+          id: profile.id,
+          name: profile.name,
+          description: profile.description,
+          categories: profile.categories,
+          baseImage: profile.baseImage,
+          apt_packages: profile.aptPackages,
+          pip_packages: profile.pipPackages,
+          npm_packages: profile.npmPackages,
+          exposed_ports: profile.exposedPorts,
+          env_vars: profile.envVars,
+          resources: profile.resources,
+          needs_network: profile.needsNetwork,
+          mapped_tools: profile.mappedTools,
+          image_built: built,
+        },
+        dockerfile,
+        ai_hint: built
+          ? `Profile '${profile.name}' is ready. Use 'create_from_profile' to create a sandbox.`
+          : `Profile '${profile.name}' not yet built. Use 'build_profile' first.`,
+      });
+    }
+
+    // ── v5.0: Build profile image ──────────────────────────────
+    case 'build_profile': {
+      const profileId = args.profile_id;
+      if (!profileId) return fail('MISSING_PARAM', 'profile_id required');
+
+      if (!isDockerAvailable()) {
+        return fail('DOCKER_UNAVAILABLE', 'Docker is not running. Use "docker_start" first.');
+      }
+
+      const result = buildProfileImage(profileId, args.timeout_ms || 600000);
+      return result.success
+        ? ok({
+            action: 'build_profile',
+            profile_id: profileId,
+            image: result.image,
+            duration_ms: result.duration_ms,
+            ai_hint: `Profile image '${result.image}' built in ${(result.duration_ms / 1000).toFixed(1)}s. Use 'create_from_profile' to create a sandbox.`,
+          })
+        : fail('BUILD_FAILED', result.error || 'Build failed');
+    }
+
+    // ── v5.0: Create sandbox from profile ──────────────────────
+    case 'create_from_profile': {
+      let profileId = args.profile_id;
+
+      // Auto-match from categories if no profile_id given
+      if (!profileId && args.categories) {
+        const match = getProfileForCategories(args.categories);
+        if (match) profileId = match.id;
+      }
+      if (!profileId) return fail('MISSING_PARAM', 'profile_id or categories required');
+
+      if (!isDockerAvailable()) {
+        return fail('DOCKER_UNAVAILABLE', 'Docker is not running. Use "docker_start" first.');
+      }
+
+      const profile = getProfile(profileId);
+      if (!profile) return fail('NOT_FOUND', `Profile '${profileId}' not found.`);
+
+      // Auto-build if not built yet
+      const imageName = `vega-profile-${profileId}:latest`;
+      if (!isProfileBuilt(profileId)) {
+        const buildResult = buildProfileImage(profileId);
+        if (!buildResult.success) {
+          return fail('BUILD_FAILED', `Could not build profile image: ${buildResult.error}`);
+        }
+      }
+
+      // Create container from the profile image using docker run directly
+      const id = `sb-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+      const containerName = `vega-profile-${profileId}-${id}`;
+      const networkFlag = profile.needsNetwork ? '' : '--network none';
+      const portArgs = profile.exposedPorts.map(p => `-p ${p}:${p}`).join(' ');
+      const envArgs = Object.entries(profile.envVars).map(([k, v]) => `-e "${k}=${v}"`).join(' ');
+      const resourceArgs = `--cpus=${profile.resources.cpus} --memory=${profile.resources.memory}`;
+
+      try {
+        const { execSync } = await import('child_process');
+        const containerId = execSync(
+          `docker run -d ${networkFlag} ${resourceArgs} --name ${containerName} ${portArgs} ${envArgs} ${imageName} sleep infinity`,
+          { encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
+        ).trim();
+
+        return ok({
+          action: 'create_from_profile',
+          sandbox_id: id,
+          profile_id: profileId,
+          profile_name: profile.name,
+          container_name: containerName,
+          container_id: containerId.substring(0, 12),
+          image: imageName,
+          ports: profile.exposedPorts,
+          resources: profile.resources,
+          mapped_tools: profile.mappedTools,
+          status: 'running',
+          ai_hint: `Sandbox '${containerName}' running with ${profile.name} profile. Mapped tools: ${profile.mappedTools.join(', ')}. Ports: ${profile.exposedPorts.join(', ') || 'none'}. Use 'exec' with sandbox_id '${id}' to run commands.`,
+        });
+      } catch (e: any) {
+        return fail('DOCKER_ERROR', `Failed to create sandbox from profile: ${e.message}`);
+      }
+    }
+    // ── v5.0: Export container as .tar ───────────────────────────
+    case 'export': {
+      if (!args.sandbox_id) return fail('MISSING_PARAM', 'sandbox_id required');
+      const outputPath = args.output_path || path.join(os.tmpdir(), `vega-sandbox-${args.sandbox_id}.tar`);
+      try {
+        const result = dockerExportContainer(args.sandbox_id, outputPath);
+        return result.exitCode === 0
+          ? ok({ action: 'export', sandbox_id: args.sandbox_id, output_path: outputPath, message: result.stdout, ai_hint: `Container exported to ${outputPath}. Use 'import' to load it on another machine.` })
+          : fail('EXPORT_FAILED', result.stderr);
+      } catch (e: any) { return fail('EXPORT_ERROR', e.message); }
+    }
+
+    // ── v5.0: Import container from .tar ──────────────────────────
+    case 'import': {
+      if (!args.tar_path) return fail('MISSING_PARAM', 'tar_path required');
+      if (!args.image_name) return fail('MISSING_PARAM', 'image_name required (e.g. "my-sandbox:v1")');
+      const result = dockerImportContainer(args.tar_path, args.image_name);
+      return result.exitCode === 0
+        ? ok({ action: 'import', image: args.image_name, message: result.stdout, ai_hint: `Imported as '${args.image_name}'. Use 'create' with image_name to start a sandbox from it.` })
+        : fail('IMPORT_FAILED', result.stderr);
+    }
+
+    // ── v5.0: Docker Compose Up ──────────────────────────────────
+    case 'compose_up': {
+      if (!args.compose_file && !args.compose_services) return fail('MISSING_PARAM', 'compose_file or compose_services required');
+      if (!isDockerAvailable()) return fail('DOCKER_UNAVAILABLE', 'Docker is not running. Use "docker_start" first.');
+
+      let composePath = args.compose_file;
+      // Auto-generate compose file from services definition
+      if (!composePath && args.compose_services) {
+        const yaml = generateComposeFile(args.compose_services);
+        composePath = path.join(os.tmpdir(), `vega-compose-${Date.now()}.yml`);
+        const fsModule = await import('fs');
+        fsModule.writeFileSync(composePath, yaml, 'utf-8');
+      }
+
+      const result = dockerComposeUp(composePath!, args.project_name, args.timeout_ms);
+      return result.exitCode === 0
+        ? ok({ action: 'compose_up', compose_file: composePath, project: args.project_name, output: result.stdout, duration_ms: result.duration_ms, ai_hint: 'Stack is running. Use compose_status to check services, compose_down to tear down.' })
+        : fail('COMPOSE_UP_FAILED', result.stderr);
+    }
+
+    // ── v5.0: Docker Compose Down ────────────────────────────────
+    case 'compose_down': {
+      if (!args.compose_file) return fail('MISSING_PARAM', 'compose_file required');
+      const result = dockerComposeDown(args.compose_file, args.project_name, args.remove_volumes);
+      return result.exitCode === 0
+        ? ok({ action: 'compose_down', compose_file: args.compose_file, output: result.stdout, duration_ms: result.duration_ms })
+        : fail('COMPOSE_DOWN_FAILED', result.stderr);
+    }
+
+    // ── v5.0: Docker Compose Status ──────────────────────────────
+    case 'compose_status': {
+      if (!args.compose_file) return fail('MISSING_PARAM', 'compose_file required');
+      const result = dockerComposePs(args.compose_file, args.project_name);
+      let services: any[] = [];
+      try { services = JSON.parse(`[${result.stdout.split('\n').join(',')}]`); } catch { services = [{ raw: result.stdout }]; }
+      return result.exitCode === 0
+        ? ok({ action: 'compose_status', compose_file: args.compose_file, services })
+        : fail('COMPOSE_STATUS_FAILED', result.stderr);
+    }
+
+    // ── v5.0: Container Health Check ─────────────────────────────
+    case 'health_check': {
+      if (!args.sandbox_id) return fail('MISSING_PARAM', 'sandbox_id required');
+      try {
+        const health = dockerHealthStatus(args.sandbox_id);
+        return ok({ action: 'health_check', sandbox_id: args.sandbox_id, ...health });
+      } catch (e: any) { return fail('HEALTH_ERROR', e.message); }
+    }
+
+    // ── v5.0: GPU Check ──────────────────────────────────────────
+    case 'gpu_check': {
+      const gpuInfo = dockerGpuCheck();
+      return ok({
+        action: 'gpu_check',
+        ...gpuInfo,
+        ai_hint: gpuInfo.available
+          ? `${gpuInfo.gpus.length} NVIDIA GPU(s) detected. Use gpus="all" in create to passthrough.`
+          : 'No NVIDIA GPUs detected. GPU passthrough not available.',
+      });
+    }
+
+    // ── v5.0: Network Create ─────────────────────────────────────
+    case 'network_create': {
+      if (!args.network_name) return fail('MISSING_PARAM', 'network_name required');
+      if (!isDockerAvailable()) return fail('DOCKER_UNAVAILABLE', 'Docker is not running.');
+      const result = dockerNetworkCreate(args.network_name, args.subnet);
+      return result.exitCode === 0
+        ? ok({ action: 'network_create', network: args.network_name, subnet: args.subnet, id: result.stdout, ai_hint: `Network '${args.network_name}' created. Attach containers using volumes.` })
+        : fail('NETWORK_ERROR', result.stderr);
+    }
+
+    // ── v5.0: Network Remove ─────────────────────────────────────
+    case 'network_remove': {
+      if (!args.network_name) return fail('MISSING_PARAM', 'network_name required');
+      const result = dockerNetworkRemove(args.network_name);
+      return result.exitCode === 0
+        ? ok({ action: 'network_remove', network: args.network_name })
+        : fail('NETWORK_ERROR', result.stderr);
+    }
+
     default:
-      return fail('UNKNOWN_ACTION', `Unknown: ${args.action}. Available: status, create, exec, install, snapshot, logs, stats, diff, dockerfile, batch_exec, pause, unpause, restart, set_env, ports, docker_run, docker_build, docker_copy, vm_run, ps_exec, write_file, read_file, list_files, destroy, destroy_all, list`);
+      return fail('UNKNOWN_ACTION', `Unknown: ${args.action}. Use 'status' to see all available actions and capabilities.`);
   }
 }
