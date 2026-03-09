@@ -235,7 +235,7 @@ function VPSControlTab() {
           <div className="flex-1 overflow-auto m-1 ring-1 ring-[#1e293b] relative bg-black flex items-center justify-center">
               <img 
                 id="vps-stream"
-                src={`${BRIDGE}/api/stream?t=${Date.now()}`} 
+                src={`http://REDACTED_IP:4280/api/stream?t=${Date.now()}`} 
                 className="w-full h-full object-contain z-10" 
                 alt="VPS Stream"
                 onError={(e) => {
