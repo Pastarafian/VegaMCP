@@ -22,7 +22,7 @@ export const codeAnalysisSchema = {
     properties: {
       action: {
         type: 'string',
-        enum: ['analyze_code', 'get_imports', 'get_functions', 'get_classes', 'get_complexity', 'get_structure'],
+        enum: ['analyze_code', 'get_imports', 'get_functions', 'get_classes', 'get_complexity', 'get_structure', 'analyze_confidence'],
         description: 'Action to perform',
       },
       code: { type: 'string', description: 'Source code to analyze' },
@@ -672,6 +672,52 @@ export async function handleCodeAnalysis(args: any): Promise<{ content: Array<{ 
             functions: functions.length,
             exportedFunctions: functions.filter(f => f.isExported).length,
           },
+        });
+      }
+
+      case 'analyze_confidence': {
+        const functions = parseFunctions(code, language);
+        const metrics = getCodeMetrics(code);
+        let score = 100;
+        let reasons: string[] = [];
+
+        // Complexity penalty
+        for (const fn of functions) {
+          if (fn.complexity > 20) {
+            score -= 10;
+            reasons.push(`High complexity (${fn.complexity}) in ${fn.name}() (-10)`);
+          } else if (fn.complexity > 10) {
+            score -= 5;
+            reasons.push(`Moderate complexity (${fn.complexity}) in ${fn.name}() (-5)`);
+          }
+        }
+        
+        // Large file penalty
+        if (metrics.codeLines > 500) {
+          score -= 15;
+          reasons.push(`File too large (${metrics.codeLines} LOC) (-15)`);
+        } else if (metrics.codeLines > 300) {
+          score -= 5;
+          reasons.push(`File is large (${metrics.codeLines} LOC) (-5)`);
+        }
+
+        // Maintainability bonus
+        if (metrics.codeLines > 0 && (metrics.commentLines / metrics.codeLines > 0.1)) {
+          score += 5;
+          reasons.push(`Good code-to-comment ratio (+5)`);
+        }
+
+        score = Math.max(0, Math.min(100, score));
+        let grade = score >= 90 ? 'A+' : score >= 80 ? 'B' : score >= 60 ? 'C' : 'F';
+
+        logAudit('code_analysis', `confidence: ${language} → ${score}`, true, undefined, Date.now() - start);
+        return res({
+          success: true,
+          language,
+          confidence_score: score,
+          grade,
+          reasons,
+          metrics,
         });
       }
 

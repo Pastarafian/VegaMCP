@@ -34,10 +34,10 @@ export const webSearchSchema = {
     properties: {
       action: {
         type: 'string',
-        enum: ['search', 'read_url', 'summarize_url', 'batch_search'],
+        enum: ['search', 'read_url', 'summarize_url', 'batch_search', 'verified_search'],
         description: 'Action to perform',
       },
-      query: { type: 'string', description: 'Search query (for search, batch_search)' },
+      query: { type: 'string', description: 'Search query (for search, batch_search, verified_search)' },
       url: { type: 'string', description: 'URL to read (for read_url, summarize_url)' },
       urls: {
         type: 'array',
@@ -64,6 +64,12 @@ export const webSearchSchema = {
       include_answer: { type: 'boolean', description: 'Include AI-generated answer summary (Tavily)', default: true },
       max_content_length: { type: 'number', description: 'Max content length per page (chars)', default: 5000 },
       store_results: { type: 'boolean', description: 'Store results in knowledge engine', default: false },
+      source_profile: {
+        type: 'string',
+        enum: ['software', 'research', 'finance'],
+        description: 'Profile for verified_search restricting to high-fidelity domains.',
+        default: 'software',
+      },
       queries: {
         type: 'array',
         items: { type: 'string' },
@@ -461,6 +467,42 @@ export async function handleWebSearch(args: any): Promise<{ content: Array<{ typ
           success: true,
           totalQueries: queries.length,
           results: batchResults,
+          durationMs: Date.now() - start,
+        });
+      }
+
+      case 'verified_search': {
+        if (!args.query) return res({ success: false, error: 'Provide a search query' });
+        
+        const profile = args.source_profile || 'software';
+        let siteFilter = '';
+        if (profile === 'software') siteFilter = 'site:github.com OR site:stackoverflow.com OR site:gitlab.com OR site:codeproject.com';
+        else if (profile === 'research') siteFilter = 'site:arxiv.org OR site:nature.com OR site:plos.org';
+        else if (profile === 'finance') siteFilter = 'site:investopedia.com OR site:mql5.com/en/docs OR site:arxiv.org/abs quant';
+        
+        const effectiveQuery = `(${siteFilter}) ${args.query}`;
+        
+        let searchResult = await tavilySearch(
+          effectiveQuery,
+          args.num_results || 5,
+          'advanced',
+          args.include_answer !== false
+        );
+        
+        if (searchResult.error && getSearxngUrl()) {
+          const fallback = await searxngSearch(effectiveQuery, args.num_results || 5);
+          if (!fallback.error) searchResult = { results: fallback.results };
+        }
+        
+        logAudit('web_search', `verified_search[${profile}]: "${args.query}" → ${searchResult.results?.length || 0} results`, true, undefined, Date.now() - start);
+        
+        return res({
+          success: true,
+          query: args.query,
+          profile,
+          effectiveQuery,
+          answer: searchResult.answer ? `[UNVERIFIED_AI_ANSWER]: ${searchResult.answer}` : undefined,
+          results: searchResult.results,
           durationMs: Date.now() - start,
         });
       }

@@ -34,6 +34,13 @@ import { EventEmitter } from 'events';
 import { getIdeKnowledge } from './ide-knowledge.js';
 import { ProjectMemory } from './project-memory.js';
 import { AdaptiveRouter } from './adaptive-router.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+
+const JWT_SECRET = 'vega_orbital_strike_key_' + os.hostname();
+let ADMIN_HASH = '$2b$10$f2i4i45Om.6RbkjqqEpVkeeyc3HPmBIfd7EjNRF4Lk2SMA0lDXPdaS'; // VegaShift_2026
+let forcePasswordChange = true;
+
 
 // ═══════════════════════════════════════════════════════════════
 // Observability: The Nervous System of The Claw
@@ -96,6 +103,7 @@ interface AgentTarget {
   lastScreenshot?: string;     // base64 PNG
   lastScreenState?: string;    // Vision AI description
   taskHistory: string[];
+  code_server_url?: string;     // The URL to embed in the dashboard (e.g. http://localhost:8787)
 }
 
 interface ScreenState {
@@ -696,7 +704,7 @@ export const theClawSchema = {
     properties: {
       action: {
         type: 'string',
-        enum: ['register', 'unregister', 'list', 'prompt', 'screenshot', 'click', 'type', 'key', 'status', 'dispatch', 'collect', 'learn', 'find_element', 'plan', 'run_plan', 'consensus', 'screen_diff', 'chain', 'race', 'handoff', 'record', 'replay', 'switch_model', 'ide_action'],
+        enum: ['register', 'unregister', 'list', 'prompt', 'screenshot', 'click', 'type', 'key', 'status', 'dispatch', 'collect', 'learn', 'find_element', 'plan', 'run_plan', 'consensus', 'screen_diff', 'chain', 'race', 'handoff', 'record', 'replay', 'switch_model', 'ide_action', 'local_shell', 'local_read', 'local_write', 'github_sync'],
         description: 'The Claw action',
       },
       agent_id: { type: 'string', description: 'Agent identifier (for targeting a specific machine)' },
@@ -727,6 +735,11 @@ export const theClawSchema = {
       target_model: { type: 'string', description: 'Target model name to switch to (e.g. "claude-3.5-sonnet", "gpt-4o", "gemini-2.5-pro")' },
       // IDE general actions
       action_name: { type: 'string', description: 'Name of the IDE action to perform (e.g. "toggle_terminal", "run_terminal_command", "open_file_explorer")' },
+      // OpenClaw Local Automations
+      cmd: { type: 'string', description: 'Local OS shell command to run' },
+      filepath: { type: 'string', description: 'Path to local file for reading/writing' },
+      content: { type: 'string', description: 'Text content to write to local file' },
+      api_intent: { type: 'string', description: 'Natural language intent for the selected API (Spotify, Calendar, etc.)' },
       // Observability
       limit: { type: 'number', description: 'Number of logs to fetch' },
       query: { type: 'string', description: 'Reflection query' },
@@ -1479,12 +1492,13 @@ export async function handleTheClaw(args: any): Promise<{ content: Array<{ type:
 
     // ── Register: Add a new agent node to the fleet ──
     case 'register': {
-      const { id, name, host, port, ide, model } = args;
+      const { id, name, host, port, ide, model, code_server_url } = args;
       if (!id || !host || !port) return fail('MISSING_PARAM', 'id, host, and port are required');
       
       const newAgent: AgentTarget = {
         id, name: name || id, host, port, ide: ide || 'cursor-win', 
-        model: model || 'claude-3.5-sonnet', status: 'idle', taskHistory: []
+        model: model || 'claude-3.5-sonnet', status: 'idle', taskHistory: [],
+        code_server_url: code_server_url || `${host}:8787` // Fallback to host:8787 if not provided
       };
       agents.set(id, newAgent);
       
@@ -1846,6 +1860,49 @@ export async function handleTheClaw(args: any): Promise<{ content: Array<{ type:
       return ok({ action: 'fleet_capabilities', ...capabilities });
     }
 
+    // ═══════════════════════════════════════════════════════
+    // OpenClaw Local API/OS Bridging (Personal Assistant Actions)
+    // ═══════════════════════════════════════════════════════
+
+    case 'local_shell': {
+      if (!args.cmd) return fail('MISSING_PARAM', 'cmd is required for local shell execution');
+      try {
+        const { execSync } = require('child_process');
+        const output = execSync(args.cmd, { encoding: 'utf-8', timeout: 30000 });
+        monitor.emit_event({ type: 'action', message: `Local Shell Executed: ${args.cmd}` });
+        return ok({ action: 'local_shell', cmd: args.cmd, output });
+      } catch (err: any) {
+        return fail('SHELL_EXEC_FAILED', err.stdout ? err.stdout : err.message);
+      }
+    }
+
+    case 'local_read': {
+      if (!args.filepath) return fail('MISSING_PARAM', 'filepath is required for local_read');
+      try {
+        const content = fs.readFileSync(path.resolve(args.filepath), 'utf-8');
+        return ok({ action: 'local_read', filepath: args.filepath, content });
+      } catch (err: any) {
+        return fail('FILE_READ_FAILED', err.message);
+      }
+    }
+
+    case 'local_write': {
+      if (!args.filepath || !args.content) return fail('MISSING_PARAM', 'filepath and content are required for local_write');
+      try {
+        fs.writeFileSync(path.resolve(args.filepath), args.content, 'utf-8');
+        monitor.emit_event({ type: 'action', message: `Local File Written: ${args.filepath}` });
+        return ok({ action: 'local_write', filepath: args.filepath, bytes: Buffer.from(args.content).length });
+      } catch (err: any) {
+        return fail('FILE_WRITE_FAILED', err.message);
+      }
+    }
+
+    case 'github_sync': {
+      const intent = args.api_intent || 'check PRs';
+      monitor.emit_event({ type: 'action', message: `GitHub Sync Intent: ${intent}` });
+      return ok({ action: 'github_sync', status: 'simulated_success', message: `Processed GitHub intent: '${intent}'` });
+    }
+
     default:
       return fail('UNKNOWN_ACTION', `Unknown action: ${args.action}`);
   }
@@ -1895,28 +1952,110 @@ async function captureAndAnalyze(agent: AgentTarget): Promise<ScreenState> {
 
 const GUI_PORT = 42019;
 
+function authenticate(req: http.IncomingMessage): boolean {
+  // Check Authorization header
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      jwt.verify(token, JWT_SECRET);
+      return true;
+    } catch (e) {}
+  }
+
+  // Check Cookie header
+  const cookieHeader = req.headers['cookie'];
+  if (cookieHeader) {
+     const cookies = cookieHeader.split(';').reduce((res: any, c) => {
+       const [key, val] = c.trim().split('=');
+       res[key] = val;
+       return res;
+     }, {});
+     const token = cookies['vegatech_auth'] || cookies['mqclaw_auth'];
+     if (token) {
+        // If it's a JWT, verify it
+        try {
+          jwt.verify(token, JWT_SECRET);
+          return true;
+        } catch (e) {
+          // Fallback: If it's the MQClaw local token (the hash), compare it
+          // This allows compatibility with MQClaw's simple auth
+          if (token === ADMIN_HASH) return true;
+        }
+     }
+  }
+
+  return false;
+}
+
 const bridge = http.createServer(async (req, res) => {
   // Simple CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   
   if (req.method === 'OPTIONS') { res.end(); return; }
 
   const parsedUrl = url.parse(req.url || '', true);
+
+  // Helper for Unauthorized
+  const unauthorized = () => {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized' }));
+  };
+
+  if (parsedUrl.pathname === '/login' && req.method === 'POST') {
+    // Login doesn't need auth check
+  } else {
+    // All other endpoints are protected
+    if (!authenticate(req)) return unauthorized();
+  }
 
   if (parsedUrl.pathname === '/logs') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(monitor.get_recent_logs(100)));
   } 
   else if (parsedUrl.pathname === '/status') {
-    const fleet = Array.from(agents.values()).map(a => ({
+    const fleetInfo = Array.from(agents.values()).map(a => ({
       id: a.id, name: a.name, status: a.status, model: a.model, ide: a.ide,
       last_state: a.lastScreenState,
+      code_server_url: a.code_server_url,
       cpu: Math.floor(Math.random() * 20) + 5, // Mock hardware check for now
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'online', fleet }));
+    res.end(JSON.stringify({ status: 'online', fleet: fleetInfo }));
+  }
+  else if (parsedUrl.pathname === '/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { username, password, newPassword } = JSON.parse(body);
+        console.log(`[The Claw] Login attempt for: ${username}`);
+        if (username === 'admin' && bcrypt.compareSync(password, ADMIN_HASH)) {
+          if (forcePasswordChange && !newPassword) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'PASSWORD_CHANGE_REQUIRED' }));
+          }
+          
+          if (forcePasswordChange && newPassword) {
+             ADMIN_HASH = bcrypt.hashSync(newPassword, 10);
+             forcePasswordChange = false;
+          }
+
+          const token = jwt.sign({ user: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ token, forceChange: forcePasswordChange }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid credentials' }));
+        }
+      } catch (err: any) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
   }
   else if (parsedUrl.pathname === '/command' && req.method === 'POST') {
     let body = '';
@@ -1975,6 +2114,112 @@ const bridge = http.createServer(async (req, res) => {
     const caps = AdaptiveRouter.capabilities();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(caps));
+  }
+  else if (parsedUrl.pathname === '/knowledge' && req.method === 'GET') {
+    // Return high-fidelity workspace rules and coding patterns
+    const knowledge = {
+      standards: [
+        { title: 'Deterministic Logic', desc: 'Prefer pure functions and immutable state.' },
+        { title: 'Structured Logging', desc: 'All tools must emit ClawEvent objects.' },
+        { title: 'Async Resilience', desc: 'Use retry loops with exponential backoff.' }
+      ],
+      constraints: [
+        { title: 'Hardware', desc: 'Limit concurrent vision tasks to 2 agents.' },
+        { title: 'Latency', desc: 'Bridge timeout set to 10s for stability.' }
+      ],
+      active_brain: '14-Agent Swarm Orchestrator (VegaMCP v7.1)'
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(knowledge));
+  }
+  const STATE_FILE = 'C:/Users/fakej/Documents/VegaMCP/vega_custodian_state.json';
+  
+  const getCustodianState = () => {
+      try {
+          if (require('fs').existsSync(STATE_FILE)) {
+              return JSON.parse(require('fs').readFileSync(STATE_FILE, 'utf-8'));
+          }
+      } catch(e) {}
+      return { activeProposals: [], discoveredWorkspaces: [] };
+  };
+
+  const saveCustodianState = (state: any) => {
+      try {
+          require('fs').writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+      } catch(e) {}
+  };
+
+  if (parsedUrl.pathname === '/proposals' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getCustodianState().activeProposals));
+  }
+  else if (parsedUrl.pathname === '/proposals/action' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { id, action } = JSON.parse(body);
+        const state = getCustodianState();
+        const proposalIndex = state.activeProposals.findIndex((p: any) => p.id === id);
+        
+        if (proposalIndex === -1) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: 'Proposal not found' }));
+        }
+
+        const proposal = state.activeProposals[proposalIndex];
+
+        if (action === 'approve') {
+          monitor.emit_event({ type: 'action', message: `Approved Proposal: ${proposal.title}` });
+          try {
+            if (require('fs').existsSync(proposal.file)) {
+                let content = require('fs').readFileSync(proposal.file, 'utf-8');
+                content = content.replace(proposal.oldCode, proposal.newCode);
+                require('fs').writeFileSync(proposal.file, content);
+            }
+          } catch(e) {
+              console.error('Failed to write proposal patch to disk', e);
+          }
+        } else if (action === 'decline') {
+          monitor.emit_event({ type: 'action', message: `Declined Proposal: ${proposal.title}` });
+        }
+
+        state.activeProposals.splice(proposalIndex, 1);
+        saveCustodianState(state);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, action, id }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+  }
+  else if (parsedUrl.pathname === '/workspaces/discovered' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getCustodianState().discoveredWorkspaces));
+  }
+  else if (parsedUrl.pathname === '/workspaces/action' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { id, action } = JSON.parse(body);
+        const state = getCustodianState();
+        const idx = state.discoveredWorkspaces.findIndex((w: any) => w.id === id);
+        if (idx > -1) {
+            const ws = state.discoveredWorkspaces[idx];
+            monitor.emit_event({ type: 'meta', message: `Workspace Radar: ${action}ed tracking for ${ws.name}` });
+            state.discoveredWorkspaces.splice(idx, 1);
+            saveCustodianState(state);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
   }
   else {
     res.writeHead(404);

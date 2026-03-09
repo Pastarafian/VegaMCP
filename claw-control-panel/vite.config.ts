@@ -1,13 +1,13 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 42018,
-    strictPort: true, // Fail if port is in use to prevent random ports
-    host: true,       // Listen on all local IPS
+    strictPort: true,
+    host: true,
   },
-  clearScreen: false, // Tauri requires this
+  clearScreen: false,
 })

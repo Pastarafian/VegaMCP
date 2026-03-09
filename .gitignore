@@ -106,3 +106,6 @@ auth_store/
 *.p12
 credentials.json
 token.json
+
+# Portfolio Website
+vegatech/
