@@ -337,5 +337,5 @@ Write-Host "    • detect-capabilities.ps1 — Discover capabilities" -Foregrou
 Write-Host "    • resource-monitor.ps1    — Background resource logging" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Next: Update your .env with the SSH port," -ForegroundColor Yellow
-Write-Host "  then test: ssh trader@REDACTED_IP" -ForegroundColor Yellow
+Write-Host "  then test: ssh trader@<your-vps-ip>" -ForegroundColor Yellow
 Write-Host ""

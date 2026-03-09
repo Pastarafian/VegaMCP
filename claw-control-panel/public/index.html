@@ -1,0 +1,4958 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VegaClaw Command Centre</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --bg-primary: #0a0e17;
+        --bg-card: #111827;
+        --bg-card-hover: #1a2332;
+        --border: #1e293b;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+        --accent-blue: #3b82f6;
+        --accent-green: #22c55e;
+        --accent-red: #ef4444;
+        --accent-amber: #f59e0b;
+        --accent-purple: #a855f7;
+        --accent-cyan: #06b6d4;
+        --gradient: linear-gradient(
+          135deg,
+          #3b82f6 0%,
+          #8b5cf6 50%,
+          #ec4899 100%
+        );
+      }
+
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Header ── */
+      .header {
+        background: linear-gradient(
+          180deg,
+          rgba(59, 130, 246, 0.15) 0%,
+          transparent 100%
+        );
+        border-bottom: 1px solid var(--border);
+        padding: 1rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-shrink: 0;
+      }
+      .header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+      .header h1 span {
+        background: var(--gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      /* ── Navigation Tabs ── */
+      .tabs {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .tab {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+      }
+      .tab:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .tab.active {
+        background: var(--accent-blue);
+        color: white;
+      }
+
+      .header .badge {
+        margin-left: auto;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .badge--online {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--accent-green);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+      }
+      .header .time {
+        margin-left: 1rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        font-family: monospace;
+      }
+
+      /* ── Content Panes ── */
+      .tab-pane {
+        display: none;
+        padding: 1.5rem 2rem;
+        flex: 1;
+        overflow-y: auto;
+      }
+      .tab-pane.active {
+        display: block;
+      }
+      .tab-pane.flex-pane.active {
+        display: flex;
+      }
+      .tab-pane.iframe-pane {
+        padding: 0;
+        display: none;
+        flex-direction: column;
+      }
+      .tab-pane.iframe-pane.active {
+        display: flex;
+      }
+      .tab-pane iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        flex: 1;
+      }
+
+      /* ── Grid Layout ── */
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 1.25rem;
+      }
+
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.2s;
+        margin-bottom: 1.25rem;
+      }
+      .card:hover {
+        border-color: rgba(59, 130, 246, 0.3);
+        background: var(--bg-card-hover);
+      }
+      .card-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .card-header .icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+      }
+      .card-header h3 {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+      .card-body {
+        padding: 1.25rem;
+      }
+
+      /* ── Advanced Terminal Chat UI ── */
+      .toolbar {
+        padding: 8px 0;
+        display: flex;
+        gap: 8px;
+        border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+        margin-bottom: 10px;
+      }
+      .toolbar button {
+        background: rgba(0, 0, 0, 0.4);
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+        padding: 4px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: all 0.2s;
+      }
+      .toolbar button:hover {
+        background: rgba(168, 85, 247, 0.2);
+        color: white;
+        border-color: var(--accent-purple);
+      }
+      .msg {
+        max-width: 85%;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        margin-bottom: 12px;
+        animation: fadeIn 0.3s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, var(--accent-purple), #5a4bd1);
+        color: white;
+        border-bottom-right-radius: 4px;
+        margin-left: auto;
+      }
+      .msg.assistant {
+        align-self: flex-start;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        border-bottom-left-radius: 4px;
+        margin-right: auto;
+      }
+      .msg pre {
+        background: #0d0d15;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        margin: 8px 0;
+        overflow-x: auto;
+        font-family: monospace;
+        font-size: 0.8rem;
+      }
+      .msg code {
+        font-family: monospace;
+      }
+
+      #input-area textarea {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-family: inherit;
+        font-size: 0.85rem;
+        resize: none;
+        min-height: 44px;
+        max-height: 120px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      #input-area textarea:focus {
+        border-color: var(--accent-purple);
+      }
+
+      /* ── Chat Collapse/Expand ── */
+      .chat-col {
+        position: relative;
+        transition:
+          width 0.3s ease,
+          min-width 0.3s ease;
+      }
+      .chat-col.collapsed {
+        width: 44px !important;
+        min-width: 44px !important;
+      }
+      .chat-col.collapsed .chat-inner {
+        display: none;
+      }
+      .chat-col.collapsed .chat-collapsed-label {
+        display: flex;
+      }
+      .chat-toggle {
+        position: absolute;
+        top: 50%;
+        right: -16px;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 48px;
+        border-radius: 0 6px 6px 0;
+        background: rgba(168, 85, 247, 0.3);
+        border: 1px solid rgba(168, 85, 247, 0.4);
+        border-left: none;
+        color: var(--accent-purple);
+        cursor: pointer;
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99;
+        transition: all 0.2s;
+        opacity: 0.7;
+      }
+      .chat-toggle:hover {
+        opacity: 1;
+        background: rgba(168, 85, 247, 0.5);
+        width: 20px;
+      }
+      .chat-collapsed-label {
+        display: none;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        color: var(--accent-purple);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: 1rem 0;
+        user-select: none;
+        cursor: pointer;
+      }
+
+      /* ── Status Indicators ── */
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+      }
+      .status-row:last-child {
+        border-bottom: none;
+      }
+      .status-label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+      }
+      .status-value {
+        font-weight: 600;
+        font-size: 0.85rem;
+        font-family: monospace;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+      }
+      .dot-green {
+        background: var(--accent-green);
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+      }
+      .dot-red {
+        background: var(--accent-red);
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+      }
+      .dot-amber {
+        background: var(--accent-amber);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+      }
+
+      /* ── Buttons ── */
+      .btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: all 0.15s;
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+      .btn-primary {
+        background: var(--accent-blue);
+        color: white;
+        border-color: var(--accent-blue);
+      }
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+      .btn-success {
+        background: var(--accent-green);
+        color: white;
+        border-color: var(--accent-green);
+      }
+      .btn-danger {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--accent-red);
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--text-secondary);
+      }
+      .btn-ghost:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .btn-group {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.75rem;
+      }
+
+      /* ── Event Log ── */
+      .event-log {
+        max-height: 300px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.75rem;
+      }
+      .event-log::-webkit-scrollbar {
+        width: 4px;
+      }
+      .event-log::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 4px;
+      }
+      .event-entry {
+        padding: 4px 8px;
+        border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+        display: flex;
+        gap: 8px;
+      }
+      .event-time {
+        color: var(--text-muted);
+        min-width: 65px;
+      }
+      .event-type {
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        min-width: 55px;
+        text-align: center;
+      }
+      .type-sight {
+        background: rgba(6, 182, 212, 0.2);
+        color: var(--accent-cyan);
+      }
+      .type-thought {
+        background: rgba(168, 85, 247, 0.2);
+        color: var(--accent-purple);
+      }
+      .type-action {
+        background: rgba(59, 130, 246, 0.2);
+        color: var(--accent-blue);
+      }
+      .type-error {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--accent-red);
+      }
+      .type-meta {
+        background: rgba(100, 116, 139, 0.2);
+        color: var(--text-muted);
+      }
+      .event-msg {
+        color: var(--text-secondary);
+        word-break: break-word;
+      }
+
+      .full-width {
+        grid-column: 1 / -1;
+      }
+
+      /* VPS Connection Grid */
+      .vps-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+      }
+      .vps-item {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        position: relative;
+      }
+      .vps-item h4 {
+        margin-bottom: 0.5rem;
+        color: var(--text-primary);
+      }
+      .vps-item p {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: white;
+        font-size: 0.85rem;
+        margin-bottom: 10px;
+        font-family: inherit;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+      }
+      label {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        display: block;
+        margin-bottom: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🦀 <span>VegaClaw</span> Dashboard</h1>
+      <div class="tabs">
+        <div
+          class="tab active"
+          id="tab-btn-terminal"
+          onclick="switchTab('tab-terminal', this)"
+        >
+          🤖 AI Terminal
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-local"
+          onclick="switchTab('tab-local', this)"
+        >
+          📊 System Status
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-forge"
+          onclick="switchTab('tab-forge', this)"
+        >
+          🔥 FORGE Pipeline
+        </div>
+        <div class="tab" onclick="switchTab('tab-vps-mgr', this)">
+          🎛️ VPS Swarm Manager
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-vps"
+          onclick="switchTab('tab-vps-terminal', this)"
+          style="display: none"
+        >
+          🤖 VPS AI Terminal
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-knowledge"
+          onclick="switchTab('tab-knowledge', this)"
+        >
+          🧠 Knowledge Engine
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-cluster"
+          onclick="switchTab('tab-cluster', this)"
+        >
+          🦅 Omni-Cluster
+        </div>
+        <div
+          class="tab"
+          id="tab-btn-settings"
+          onclick="switchTab('tab-settings', this)"
+        >
+          ⚙️ Settings
+        </div>
+      </div>
+      <div class="badge badge--online" id="status-badge">ONLINE</div>
+      <div class="time" id="clock"></div>
+    </div>
+
+    <!-- PANE: AI TERMINAL -->
+    <div
+      class="tab-pane flex-pane active"
+      id="tab-terminal"
+      style="
+        flex-direction: row;
+        padding: 0;
+        flex: 1;
+        height: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+        background: #050508;
+      "
+    >
+      <!-- LEFT: Chat (28%) with collapse/expand -->
+      <div
+        id="chatCol"
+        class="chat-col"
+        style="
+          width: 28%;
+          min-width: 350px;
+          display: flex;
+          flex-direction: column;
+          border-right: 1px solid var(--border);
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 10;
+        "
+      >
+        <div id="chatTog" class="chat-toggle" onclick="toggleChatPanel()">
+          ◀
+        </div>
+        <div class="chat-collapsed-label" onclick="toggleChatPanel()">
+          🤖 SWARM COPILOT
+        </div>
+        <div
+          class="chat-inner"
+          style="display: flex; flex-direction: column; height: 100%"
+        >
+          <div
+            style="
+              padding: 10px 15px;
+              border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+              background: rgba(168, 85, 247, 0.1);
+              display: flex;
+              align-items: center;
+            "
+          >
+            <h3 style="color: var(--text-primary); font-size: 0.9rem">
+              🤖 Swarm Copilot
+            </h3>
+          </div>
+          <div
+            style="padding: 10px 15px; border-bottom: 1px solid var(--border)"
+          >
+            <div
+              class="toolbar"
+              style="
+                flex-wrap: wrap;
+                gap: 5px;
+                border: none;
+                padding: 0;
+                margin: 0;
+              "
+            >
+              <button
+                onclick="
+                  document.getElementById('terminal-input').value =
+                    'Audit my workspace and find syntax errors';
+                  sendTerminalChat();
+                "
+              >
+                🛠️ Auto Audit
+              </button>
+              <button
+                onclick="
+                  document.getElementById('terminal-input').value =
+                    'Generate a full implementation plan for this project';
+                  sendTerminalChat();
+                "
+              >
+                🏗️ Plan
+              </button>
+              <button onclick="runCodeAudit()">🔬 Code Audit</button>
+              <button
+                onclick="
+                  document.getElementById('terminal-input').value =
+                    'Refactor the current code: improve naming, extract functions, remove duplication, add types';
+                  sendTerminalChat();
+                "
+              >
+                ✨ Refactor
+              </button>
+              <button
+                onclick="
+                  document.getElementById('terminal-input').value =
+                    'Scan workspace for bugs and TODO items';
+                  sendTerminalChat();
+                "
+              >
+                🔍 Scan Code
+              </button>
+              <button
+                onclick="
+                  document.getElementById('terminal-history').innerHTML = ''
+                "
+              >
+                🗑️ Clear
+              </button>
+            </div>
+          </div>
+          <div
+            class="card-body"
+            style="
+              flex: 1;
+              overflow-y: auto;
+              padding: 10px 15px;
+              display: flex;
+              flex-direction: column;
+            "
+            id="terminal-history"
+          >
+            <div class="msg assistant">
+              <strong>VegaClaw Omni-Swarm Active 🦅</strong><br /><br />I have
+              full agentic control over 14 AI agents. I can write code, manage
+              the VPS, run builds, and deploy. What are we building?
+            </div>
+          </div>
+          <div
+            id="input-area"
+            style="
+              padding: 10px 15px;
+              border-top: 1px solid rgba(168, 85, 247, 0.2);
+              background: rgba(0, 0, 0, 0.8);
+              display: flex;
+              gap: 10px;
+              align-items: flex-end;
+            "
+          >
+            <textarea
+              id="terminal-input"
+              placeholder="Ask the swarm..."
+              rows="1"
+              onkeydown="
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  sendTerminalChat();
+                }
+              "
+            ></textarea>
+            <button
+              class="btn btn-primary"
+              onclick="sendTerminalChat()"
+              style="
+                background: var(--accent-purple);
+                border: none;
+                padding: 10px 15px;
+                border-radius: 8px;
+              "
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Viewport (75%) -->
+      <div
+        style="
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          background: var(--bg-card);
+          min-width: 0;
+        "
+      >
+        <!-- Viewport Internal Tabs -->
+        <div
+          style="
+            display: flex;
+            background: #0d1117;
+            border-bottom: 1px solid var(--border);
+          "
+        >
+          <div
+            class="view-tab active"
+            onclick="switchViewTab('view-vps', this)"
+            style="
+              padding: 8px 20px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #8b949e;
+              cursor: pointer;
+              border-right: 1px solid var(--border);
+              border-bottom: 2px solid transparent;
+            "
+          >
+            🛰️ VPS Live View
+          </div>
+          <div
+            class="view-tab"
+            onclick="switchViewTab('view-mt5', this)"
+            id="tab-mt5-live"
+            style="
+              padding: 8px 20px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #8b949e;
+              cursor: pointer;
+              border-right: 1px solid var(--border);
+              border-bottom: 2px solid transparent;
+            "
+          >
+            📊 App Monitor
+          </div>
+          <div
+            class="view-tab"
+            onclick="switchViewTab('view-editor', this)"
+            id="tab-editor-live"
+            style="
+              padding: 8px 20px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #8b949e;
+              cursor: pointer;
+              border-right: 1px solid var(--border);
+              border-bottom: 2px solid transparent;
+            "
+          >
+            🖥️ Secondary View
+          </div>
+          <div
+            class="view-tab"
+            onclick="switchViewTab('view-code', this)"
+            style="
+              padding: 8px 20px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #8b949e;
+              cursor: pointer;
+              border-right: 1px solid var(--border);
+              border-bottom: 2px solid transparent;
+            "
+          >
+            📝 Monaco Editor
+          </div>
+          <div
+            class="view-tab"
+            onclick="switchViewTab('view-fullide', this)"
+            style="
+              padding: 8px 20px;
+              font-size: 0.85rem;
+              font-weight: 600;
+              color: #8b949e;
+              cursor: pointer;
+              border-right: 1px solid var(--border);
+              border-bottom: 2px solid transparent;
+            "
+          >
+            🧠 Full IDE (VSCode)
+          </div>
+          <style>
+            .view-tab:hover {
+              background: rgba(255, 255, 255, 0.05);
+              color: #c9d1d9;
+            }
+            .view-tab.active {
+              background: #161b22;
+              color: white;
+              border-bottom-color: var(--accent-purple);
+            }
+            .viewport-pane {
+              display: none;
+              height: 100%;
+              flex: 1;
+              min-height: 0;
+            }
+            .viewport-pane.active {
+              display: flex;
+            }
+          </style>
+        </div>
+
+        <!-- Viewport Workspace -->
+        <div style="flex: 1; position: relative; min-height: 0; display: flex">
+          <!-- VPS PANE -->
+          <div
+            id="view-vps"
+            class="viewport-pane active"
+            style="flex-direction: column; width: 100%; background: #000"
+          >
+            <div
+              style="
+                padding: 4px 10px;
+                background: rgba(34, 197, 94, 0.1);
+                border-bottom: 1px solid rgba(34, 197, 94, 0.2);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              "
+            >
+              <span
+                style="
+                  font-size: 0.75rem;
+                  color: var(--accent-green);
+                  font-weight: 700;
+                "
+                >🛰️ Real-time Ops (Matrix View)</span
+              >
+              <span
+                style="
+                  font-size: 0.7rem;
+                  color: var(--text-muted);
+                  margin-left: auto;
+                "
+                >Live VPS Desktop Stream (Interactive)</span
+              >
+            </div>
+            <img
+              id="vps-stream-img"
+              src="/stream"
+              onmousedown="handleVPSClick(event)"
+              oncontextmenu="
+                handleVPSClick(event);
+                return false;
+              "
+              tabindex="0"
+              onkeydown="handleVPSKey(event)"
+              onpaste="handleVPSPaste(event)"
+              style="
+                flex: 1;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                background: #000;
+                cursor: crosshair;
+                outline: none;
+              "
+            />
+          </div>
+
+          <!-- CODE PANE (Monaco) -->
+          <div
+            id="view-code"
+            class="viewport-pane"
+            style="flex-direction: row; width: 100%"
+          >
+            <!-- File Explorer Sidebar -->
+            <div
+              style="
+                width: 220px;
+                background: #11151c;
+                border-right: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+              "
+            >
+              <div
+                style="
+                  padding: 8px 10px;
+                  font-size: 0.75rem;
+                  font-weight: 700;
+                  color: #8b949e;
+                  letter-spacing: 0.5px;
+                  text-transform: uppercase;
+                "
+              >
+                Explorer
+              </div>
+              <div
+                id="monaco-file-tree"
+                style="
+                  flex: 1;
+                  overflow-y: auto;
+                  font-size: 0.8rem;
+                  font-family: &quot;Segoe UI&quot;;
+                  padding: 5px 0;
+                "
+              >
+                <div
+                  style="
+                    padding: 4px 15px;
+                    cursor: pointer;
+                    color: var(--text-secondary);
+                    display: flex;
+                    gap: 6px;
+                  "
+                >
+                  <span>📁</span> VegaMCP Workspace
+                </div>
+                <div
+                  style="
+                    padding: 4px 15px 4px 30px;
+                    cursor: pointer;
+                    color: white;
+                    display: flex;
+                    gap: 6px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border-left: 2px solid var(--accent-blue);
+                  "
+                >
+                  <span>📄</span> server.ts
+                </div>
+                <div
+                  style="
+                    padding: 4px 15px 4px 30px;
+                    cursor: pointer;
+                    color: var(--text-secondary);
+                    display: flex;
+                    gap: 6px;
+                  "
+                >
+                  <span>📄</span> utils.ts
+                </div>
+                <div
+                  style="
+                    padding: 15px;
+                    color: #555;
+                    font-style: italic;
+                    font-size: 0.7rem;
+                  "
+                >
+                  (Mock tree - Syncing backend...)
+                </div>
+              </div>
+            </div>
+            <!-- Editor Area -->
+            <div
+              style="
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                background: #1e1e1e;
+                min-width: 0;
+              "
+            >
+              <!-- Editor Tabs -->
+              <div
+                style="
+                  display: flex;
+                  background: #181818;
+                  border-bottom: 1px solid #333;
+                  overflow-x: auto;
+                "
+              >
+                <div
+                  id="monaco-tab-header"
+                  style="
+                    padding: 6px 15px;
+                    font-size: 0.8rem;
+                    background: #1e1e1e;
+                    color: #e0e0e0;
+                    border-top: 2px solid var(--accent-blue);
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  "
+                >
+                  Select a file from the explorer...
+                </div>
+              </div>
+              <div
+                id="monaco-container"
+                style="flex: 1; min-height: 0; width: 100%"
+              ></div>
+            </div>
+          </div>
+
+          <!-- FULL IDE PANE (code-server / Headless Antigravity) -->
+          <div
+            id="view-fullide"
+            class="viewport-pane"
+            style="flex-direction: column; width: 100%"
+          >
+            <div
+              style="
+                padding: 4px 10px;
+                background: rgba(168, 85, 247, 0.1);
+                border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              "
+            >
+              <span
+                style="
+                  font-size: 0.75rem;
+                  color: var(--accent-purple);
+                  font-weight: 700;
+                "
+                >🧠 Headless VSCode + Antigravity Extension</span
+              >
+              <span
+                style="
+                  font-size: 0.7rem;
+                  color: var(--text-muted);
+                  margin-left: auto;
+                "
+                >Password: vegaclaw2026 | Workspace: VegaMCP</span
+              >
+            </div>
+            <iframe
+              id="fullide-iframe"
+              style="flex: 1; border: none; width: 100%; background: #1e1e1e"
+            ></iframe>
+          </div>
+
+          <!-- APP MONITOR LIVE PANE -->
+          <div
+            id="view-mt5"
+            class="viewport-pane"
+            style="
+              flex-direction: column;
+              width: 100%;
+              height: 100%;
+              background: #000;
+            "
+          >
+            <div
+              style="
+                padding: 4px 10px;
+                background: rgba(59, 130, 246, 0.1);
+                border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+                display: flex;
+                align-items: center;
+              "
+            >
+              <span
+                style="
+                  color: var(--accent-blue);
+                  font-size: 0.75rem;
+                  font-weight: 700;
+                "
+                >📊 App Monitor Terminal (Interactive)</span
+              >
+              <span style="font-size: 0.7rem; color: #666; margin-left: auto"
+                >VPS App Focus</span
+              >
+            </div>
+            <img
+              class="vps-interactive-stream"
+              src="/stream"
+              onmousedown="handleVPSClick(event)"
+              oncontextmenu="
+                handleVPSClick(event);
+                return false;
+              "
+              onkeydown="handleVPSKey(event)"
+              onpaste="handleVPSPaste(event)"
+              tabindex="0"
+              style="
+                flex: 1;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                background: #000;
+                cursor: crosshair;
+                outline: none;
+              "
+            />
+          </div>
+
+          <!-- SECONDARY VIEW PANE -->
+          <div
+            id="view-editor"
+            class="viewport-pane"
+            style="
+              flex-direction: column;
+              width: 100%;
+              height: 100%;
+              background: #000;
+            "
+          >
+            <div
+              style="
+                padding: 4px 10px;
+                background: rgba(168, 85, 247, 0.1);
+                border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+                display: flex;
+                align-items: center;
+              "
+            >
+              <span
+                style="
+                  color: var(--accent-purple);
+                  font-size: 0.75rem;
+                  font-weight: 700;
+                "
+                >🖥️ Secondary View IDE (Interactive)</span
+              >
+              <span style="font-size: 0.7rem; color: #666; margin-left: auto"
+                >VPS Secondary Focus</span
+              >
+            </div>
+            <img
+              class="vps-interactive-stream"
+              src="/stream"
+              onmousedown="handleVPSClick(event)"
+              oncontextmenu="
+                handleVPSClick(event);
+                return false;
+              "
+              onkeydown="handleVPSKey(event)"
+              onpaste="handleVPSPaste(event)"
+              tabindex="0"
+              style="
+                flex: 1;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                background: #000;
+                cursor: crosshair;
+                outline: none;
+              "
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── Monaco Workspace Logic ──
+      let currentMonacoFile = null;
+      async function loadWorkspaceTree() {
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "get_workspace_files" }),
+          });
+          const data = await resp.json();
+          if (data.success) {
+            const tree = document.getElementById("monaco-file-tree");
+            let html = `<div style="padding: 4px 15px; color: var(--text-secondary); display:flex; gap:6px; font-weight:bold;"><span>📁</span> ${data.base.split("\\").pop().split("/").pop()}</div>`;
+            data.files.forEach((f) => {
+              let icon = f.name.endsWith(".ts")
+                ? "📄"
+                : f.name.endsWith(".py")
+                  ? "🐍"
+                  : "📜";
+              let pathStr = f.path.replace(/\\/g, "\\\\"); // Escape slashes for JS
+              html += `<div onclick="openMonacoFile('${pathStr}', '${f.name}')" style="padding: 4px 15px 4px 30px; cursor: pointer; color: var(--text-secondary); display:flex; gap:6px; transition: background 0.2s;">
+                                    <span>${icon}</span> ${f.rel}
+                                 </div>`;
+            });
+            tree.innerHTML = html;
+          }
+        } catch (e) {
+          console.error("Workspace load error", e);
+        }
+      }
+
+      async function openMonacoFile(path, name) {
+        currentMonacoFile = path;
+        const tabHeader = document.getElementById("monaco-tab-header");
+        if (tabHeader)
+          tabHeader.innerHTML = `${name} <span style="font-size: 0.7rem; color:#888; cursor:pointer;" onclick="saveMonacoFile()">[💾 Save]</span>`;
+
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "read_file", path: path }),
+          });
+          const data = await resp.json();
+          if (data.success && monacoEditor) {
+            let lang = "cpp";
+            if (name.endsWith(".py")) lang = "python";
+            else if (name.endsWith(".js")) lang = "javascript";
+            else if (name.endsWith(".json")) lang = "json";
+            else if (name.endsWith(".md")) lang = "markdown";
+
+            monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+            monacoEditor.setValue(data.content);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function saveMonacoFile() {
+        if (!currentMonacoFile || !monacoEditor) return;
+        const content = monacoEditor.getValue();
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "save_file",
+              path: currentMonacoFile,
+              content: content,
+            }),
+          });
+          // Briefly highlight save success
+          const tabHeader = document.getElementById("monaco-tab-header");
+          if (tabHeader) {
+            const original = tabHeader.innerHTML;
+            tabHeader.innerHTML = `<span style="color:var(--accent-green)">💾 Saved!</span>`;
+            setTimeout(() => (tabHeader.innerHTML = original), 1000);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      // Auto-load tree on init
+      setTimeout(loadWorkspaceTree, 1500);
+
+      // Init Monaco Editor
+      let monacoEditor = null;
+      function initMonaco() {
+        if (window.require && !monacoEditor) {
+          require.config({
+            paths: {
+              vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs",
+            },
+          });
+          require(["vs/editor/editor.main"], function () {
+            // Wire up Antigravity / Local Model AI Autocomplete Hook
+            monaco.languages.registerInlineCompletionsProvider("typescript", {
+              provideInlineCompletions: async function (
+                model,
+                position,
+                context,
+                token,
+              ) {
+                // Extract surrounding code context for the Swarm
+                const textUntilPosition = model.getValueInRange({
+                  startLineNumber: Math.max(1, position.lineNumber - 50),
+                  startColumn: 1,
+                  endLineNumber: position.lineNumber,
+                  endColumn: position.column,
+                });
+
+                // Here: POST to /api/action -> action="antigravity_autocomplete"
+                // For now, we return a mock visual confirmation of the hook working.
+                console.log(
+                  "Antigravity hook called with context size:",
+                  textUntilPosition.length,
+                );
+                return {
+                  items: [
+                    {
+                      insertText:
+                        "// [Antigravity AI -> Analyzing Workspace...]",
+                      range: new monaco.Range(
+                        position.lineNumber,
+                        position.column,
+                        position.lineNumber,
+                        position.column,
+                      ),
+                    },
+                  ],
+                };
+              },
+              freeInlineCompletions: function () {},
+            });
+
+            monacoEditor = monaco.editor.create(
+              document.getElementById("monaco-container"),
+              {
+                value:
+                  "// VegaClaw Agent Active\n// Connected to workspace\n\nasync function main() {\n    console.log('VegaClaw Pipeline Running...');\n    // Your code here\n}",
+                language: "typescript",
+                theme: "vs-dark",
+                automaticLayout: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                fontSize: 13,
+                fontFamily: "'JetBrains Mono', 'Consolas', monospace",
+                inlineSuggest: { enabled: true }, // Enable native VSCode Copilot-style hints
+              },
+            );
+          });
+        }
+      }
+
+      async function switchViewTab(viewId, el) {
+        document
+          .querySelectorAll(".view-tab")
+          .forEach((t) => t.classList.remove("active"));
+        el.classList.add("active");
+        document
+          .querySelectorAll(".viewport-pane")
+          .forEach((p) => p.classList.remove("active"));
+        const pane = document.getElementById(viewId);
+        if (pane) {
+          pane.classList.add("active");
+          // Restart MJPEG stream to prevent browser freeze after display: none
+          let img = pane.querySelector(".vps-interactive-stream");
+          if (!img) img = pane.querySelector("#vps-stream-img");
+          if (img) img.src = "/stream?t=" + Date.now();
+        }
+
+        if (viewId === "view-code") {
+          if (!monacoEditor) initMonaco();
+        }
+
+        // Lazy-load Full IDE iframe on first click
+        if (viewId === "view-fullide") {
+          const iframe = document.getElementById("fullide-iframe");
+          if (
+            !iframe.src ||
+            iframe.src === "about:blank" ||
+            !iframe.src.includes("code/")
+          ) {
+            iframe.src = "/code/";
+          }
+        }
+
+        // Remote Focus App on Tab Switch
+        if (viewId === "view-mt5" || viewId === "view-editor") {
+          const appName = viewId === "view-mt5" ? "Application" : "Secondary";
+          try {
+            await fetch(API_BASE + "/action", {
+              method: "POST",
+              body: JSON.stringify({
+                action: "vps_interact",
+                type: "focus",
+                app: appName,
+              }),
+              headers: { "Content-Type": "application/json" },
+            });
+          } catch (ex) {
+            console.error("VPS Focus Error", ex);
+          }
+        }
+      }
+
+      function escapeHtml(s) {
+        if (!s) return "";
+        return s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function formatReply(text) {
+        if (!text) return "";
+        let s = escapeHtml(text);
+        s = s.replace(
+          /```(mql5|mq5|cpp|c\+\+)?\n([\s\S]*?)```/g,
+          (_, lang, code) => {
+            return (
+              '<pre style="background:rgba(0,0,0,0.4); padding:8px; border-radius:4px; overflow-x:auto; margin:6px 0;"><code>' +
+              code +
+              "</code></pre>"
+            );
+          },
+        );
+        s = s.replace(
+          /`([^`]+)`/g,
+          '<code style="background:rgba(168,85,247,0.2); padding:1px 4px; border-radius:3px;">$1</code>',
+        );
+        s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        s = s.replace(/\n/g, "<br>");
+        return s;
+      }
+
+      function toggleChatPanel() {
+        const col = document.getElementById("chatCol");
+        const tog = document.getElementById("chatTog");
+        col.classList.toggle("collapsed");
+        tog.textContent = col.classList.contains("collapsed") ? "▶" : "◀";
+      }
+
+      async function sendTerminalChat() {
+        const input = document.getElementById("terminal-input");
+        const hist = document.getElementById("terminal-history");
+        const text = input.value.trim();
+        if (!text) return;
+
+        const userMsg = document.createElement("div");
+        userMsg.className = "msg user";
+        userMsg.innerHTML = formatReply(text);
+        hist.appendChild(userMsg);
+
+        input.value = "";
+        input.disabled = true;
+
+        const assistantMsg = document.createElement("div");
+        assistantMsg.className = "msg assistant";
+        assistantMsg.innerHTML =
+          '<em style="color:var(--accent-purple);">🧠 Swarm thinking...</em>';
+        hist.appendChild(assistantMsg);
+        hist.scrollTop = hist.scrollHeight;
+
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "antigravity_code",
+              prompt: text,
+              active_file: currentMonacoFile || "",
+              file_content: monacoEditor ? monacoEditor.getValue() : "",
+            }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await resp.json();
+
+          if (data.success && data.code) {
+            if (monacoEditor) {
+              monacoEditor.setValue(data.code);
+              const codeTab = document.querySelector(
+                '.view-tab[onclick*="view-code"]',
+              );
+              if (codeTab) switchViewTab("view-code", codeTab);
+            }
+            let compileBtn = `<br><button class="btn btn-primary" onclick="compileOnVPS()" style="margin-top:8px; font-size:0.8rem; padding:6px 12px;">🔨 Build & Test</button>`;
+            assistantMsg.innerHTML =
+              '<strong style="color:var(--accent-green);">✅ Code Generated</strong><br>' +
+              (data.reply || "Code injected into Monaco.") +
+              compileBtn;
+          } else {
+            assistantMsg.innerHTML = formatReply(
+              data.reply || data.error || "No response.",
+            );
+          }
+        } catch (e) {
+          assistantMsg.innerHTML =
+            '<span style="color:var(--accent-red)">Error: ' +
+            e.message +
+            "</span>";
+        }
+        hist.scrollTop = hist.scrollHeight;
+        input.disabled = false;
+        input.focus();
+      }
+
+      async function compileOnVPS() {
+        const hist = document.getElementById("terminal-history");
+        const compileMsg = document.createElement("div");
+        compileMsg.className = "msg assistant";
+        compileMsg.innerHTML =
+          '<em style="color:var(--accent-cyan);">🔨 Building & Testing...</em>';
+        hist.appendChild(compileMsg);
+        hist.scrollTop = hist.scrollHeight;
+
+        try {
+          const code = monacoEditor ? monacoEditor.getValue() : "";
+          const fileName = currentMonacoFile
+            ? currentMonacoFile.split(/[\\/]/).pop()
+            : "VegaClaw_Generated.ts";
+
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "vps_compile",
+              code: code,
+              filename: fileName,
+            }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await resp.json();
+
+          if (data.success && data.log) {
+            let logColor = data.log.includes("0 error")
+              ? "var(--accent-green)"
+              : "var(--accent-red)";
+            compileMsg.innerHTML = `<strong style="color:${logColor};">📋 Compile Result</strong><br><pre style="background:rgba(0,0,0,0.4); padding:8px; border-radius:4px; font-size:0.75rem; overflow-x:auto; margin-top:6px;">${data.log}</pre>`;
+            if (!data.log.includes("0 error") && data.log.includes("error")) {
+              compileMsg.innerHTML +=
+                '<br><button class="btn btn-primary" onclick="autoFixCompile(\`' +
+                data.log.replace(/`/g, "") +
+                '\`)" style="margin-top:6px; font-size:0.8rem;">🔄 Auto-Fix Errors</button>';
+            }
+          } else {
+            compileMsg.innerHTML =
+              '<span style="color:var(--accent-red)">Compile failed: ' +
+              (data.error || "Unknown error") +
+              "</span>";
+          }
+        } catch (e) {
+          compileMsg.innerHTML =
+            '<span style="color:var(--accent-red)">Compile error: ' +
+            e.message +
+            "</span>";
+        }
+        hist.scrollTop = hist.scrollHeight;
+      }
+
+      async function autoFixCompile(errorLog) {
+        document.getElementById("terminal-input").value =
+          "Fix these build errors and return the corrected code:\\n" + errorLog;
+        sendTerminalChat();
+      }
+
+      async function handleVPSClick(e) {
+        e.preventDefault();
+        const imgs = document.querySelectorAll(
+          ".vps-interactive-stream, #vps-stream-img",
+        );
+        let img = null;
+        imgs.forEach((i) => {
+          if (i.offsetParent !== null) img = i;
+        });
+        if (!img) return;
+
+        const rect = img.getBoundingClientRect();
+
+        // natural width/height of VPS stream is 1920x1080
+        const nw = 1920;
+        const nh = 1080;
+        const aspect = nw / nh;
+        const rectAspect = rect.width / rect.height;
+
+        let drawW, drawH, drawX, drawY;
+
+        if (rectAspect > aspect) {
+          drawH = rect.height;
+          drawW = rect.height * aspect;
+          drawX = rect.left + (rect.width - drawW) / 2;
+          drawY = rect.top;
+        } else {
+          drawW = rect.width;
+          drawH = rect.width / aspect;
+          drawX = rect.left;
+          drawY = rect.top + (rect.height - drawH) / 2;
+        }
+
+        const x = Math.round(((e.clientX - drawX) / drawW) * nw);
+        const y = Math.round(((e.clientY - drawY) / drawH) * nh);
+
+        // Filter clicks outside the pure content region
+        if (x < 0 || x > nw || y < 0 || y > nh) return;
+
+        const button = e.button === 2 ? 3 : 1;
+
+        try {
+          await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "vps_interact",
+              type: "click",
+              x: x,
+              y: y,
+              button: button,
+            }),
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (ex) {
+          console.error("VPS Mouse Error", ex);
+        }
+      }
+
+      async function handleVPSPaste(e) {
+        e.preventDefault();
+        const text = e.clipboardData.getData("text");
+        if (!text) return;
+        try {
+          await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "vps_interact",
+              type: "paste",
+              text: text,
+            }),
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (ex) {
+          console.error("VPS Paste Error", ex);
+        }
+      }
+
+      async function handleVPSKey(e) {
+        let key = e.key;
+        if (
+          e.ctrlKey &&
+          (key.toLowerCase() === "v" || key.toLowerCase() === "c")
+        ) {
+          // Let browser handle paste natively if ctrl+v, so handleVPSPaste is fired
+          // For ctrl+c, we allow it to pass through to the browser clipboard if applicable
+          // but we also send it to the VPS below so the wine clipboard updates locally.
+        } else {
+          e.preventDefault();
+        }
+
+        if (key === "Enter") key = "Return";
+        if (key === " ") key = "space";
+
+        let prefix = "";
+        if (e.ctrlKey && key !== "Control") prefix += "ctrl+";
+        if (e.shiftKey && key !== "Shift") prefix += "shift+";
+        if (e.altKey && key !== "Alt") prefix += "alt+";
+
+        if (key === "Control" || key === "Shift" || key === "Alt") return;
+
+        let finalKey = key;
+        if (prefix) finalKey = prefix + key.toLowerCase();
+
+        if (
+          key.length === 1 ||
+          [
+            "Return",
+            "space",
+            "BackSpace",
+            "Tab",
+            "Escape",
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+          ].includes(key) ||
+          finalKey.includes("+")
+        ) {
+          try {
+            await fetch(API_BASE + "/action", {
+              method: "POST",
+              body: JSON.stringify({
+                action: "vps_interact",
+                type: "key",
+                key: finalKey,
+              }),
+              headers: { "Content-Type": "application/json" },
+            });
+          } catch (ex) {
+            console.error("VPS Key Error", ex);
+          }
+        }
+      }
+    </script>
+    <!-- PANE: LOCAL DASHBOARD -->
+    <div class="tab-pane" id="tab-local">
+      <div class="dashboard-grid">
+        <!-- MT5 Status -->
+        <div class="card">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(59, 130, 246, 0.15);
+                color: var(--accent-blue);
+              "
+            >
+              📊
+            </div>
+            <h3>VegaMCP Server</h3>
+          </div>
+          <div class="card-body">
+            <div class="status-row">
+              <span class="status-label">Status</span>
+              <span class="status-value" id="mt5-status"
+                ><span class="status-dot dot-amber"></span>Checking...</span
+              >
+            </div>
+            <div class="status-row">
+              <span class="status-label">Server Port</span>
+              <span class="status-value" id="mt5-path" style="font-size: 0.7rem"
+                >—</span
+              >
+            </div>
+            <div class="status-row">
+              <span class="status-label">Workspace Path</span>
+              <span class="status-value" id="mt5-data" style="font-size: 0.7rem"
+                >—</span
+              >
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="doAction('launch_mt5')">
+                ▶ Start Service
+              </button>
+              <button
+                class="btn btn-ghost"
+                onclick="doAction('screenshot_mt5')"
+              >
+                📊 Health Check
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ollama Models Status -->
+        <div class="card">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(168, 85, 247, 0.15);
+                color: var(--accent-purple);
+              "
+            >
+              ✏️
+            </div>
+            <h3>Ollama AI Models</h3>
+          </div>
+          <div class="card-body">
+            <div class="status-row">
+              <span class="status-label">Status</span>
+              <span class="status-value" id="editor-status"
+                ><span class="status-dot dot-amber"></span>Checking...</span
+              >
+            </div>
+            <div class="status-row">
+              <span class="status-label">Active Models</span>
+              <span
+                class="status-value"
+                id="editor-path"
+                style="font-size: 0.7rem"
+                >—</span
+              >
+            </div>
+            <div class="btn-group">
+              <button
+                class="btn btn-primary"
+                onclick="doAction('launch_editor')"
+              >
+                ▶ Start Service
+              </button>
+              <button
+                class="btn btn-ghost"
+                onclick="doAction('screenshot_editor')"
+              >
+                📊 Health Check
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Event Log (Full Width) -->
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(100, 116, 139, 0.15);
+                color: var(--text-muted);
+              "
+            >
+              📝
+            </div>
+            <h3>System Event Log</h3>
+            <button
+              class="btn btn-ghost"
+              style="margin-left: auto; font-size: 0.7rem"
+              onclick="doAction('monitor_log')"
+            >
+              Refresh
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="event-log" id="event-log">
+              <div class="event-entry">
+                <span class="event-time">--:--:--</span>
+                <span class="event-type type-meta">META</span>
+                <span class="event-msg">VegaClaw Dashboard started.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visual Git Diff (Full Width) -->
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(239, 68, 68, 0.15);
+                color: var(--accent-red);
+              "
+            >
+              📜
+            </div>
+            <h3>Visual Git Diff (Staging area safe-check)</h3>
+            <button
+              class="btn btn-ghost"
+              style="margin-left: auto; font-size: 0.7rem"
+              onclick="fetchGitDiff()"
+            >
+              Fetch Diff
+            </button>
+          </div>
+          <div class="card-body">
+            <pre
+              id="git-diff-output"
+              style="
+                font-family: monospace;
+                font-size: 0.75rem;
+                color: var(--text-secondary);
+                white-space: pre-wrap;
+                max-height: 300px;
+                overflow-y: auto;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 10px;
+                border-radius: 6px;
+                border: 1px solid #333;
+              "
+            >
+Click Fetch Diff to visualize workspace changes before swarm deployment.</pre
+            >
+          </div>
+        </div>
+
+        <!-- Action Result (Full Width) -->
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(59, 130, 246, 0.15);
+                color: var(--accent-blue);
+              "
+            >
+              💬
+            </div>
+            <h3>Action Result</h3>
+          </div>
+          <div class="card-body">
+            <pre
+              id="action-result"
+              style="
+                font-family: monospace;
+                font-size: 0.75rem;
+                color: var(--text-secondary);
+                white-space: pre-wrap;
+                max-height: 200px;
+                overflow-y: auto;
+              "
+            >
+System ready.</pre
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANE: VPS SWARM MANAGER -->
+    <div class="tab-pane" id="tab-vps-mgr">
+      <div class="card">
+        <div class="card-header">
+          <div
+            class="icon"
+            style="
+              background: rgba(34, 197, 94, 0.15);
+              color: var(--accent-green);
+            "
+          >
+            🔌
+          </div>
+          <h3>Connect new VPS Node</h3>
+        </div>
+        <div class="card-body">
+          <div style="display: flex; gap: 10px; align-items: flex-end">
+            <div style="flex: 2">
+              <label>IP Address / Hostname</label>
+              <input type="text" id="vps-ip" placeholder="185.x.x.x" />
+            </div>
+            <div style="flex: 1">
+              <label>AI Terminal Port</label>
+              <input type="text" id="vps-port" placeholder="8686" />
+            </div>
+            <div style="flex: 2">
+              <label>SSH Key Path (Optional)</label>
+              <input
+                type="text"
+                id="vps-key"
+                placeholder="C:\Users\fakej\.ssh\id_rsa_vegaclaw"
+              />
+            </div>
+            <div style="margin-bottom: 10px">
+              <button class="btn btn-primary" onclick="addVPSNode()">
+                ➕ Add Node
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div
+            class="icon"
+            style="
+              background: rgba(6, 182, 212, 0.15);
+              color: var(--accent-cyan);
+            "
+          >
+            🌐
+          </div>
+          <h3>Active VPS Swarm</h3>
+          <span
+            style="
+              margin-left: auto;
+              font-size: 0.8rem;
+              color: var(--accent-green);
+            "
+            >SMART ROUTING ENABLED</span
+          >
+        </div>
+        <div class="card-body">
+          <div class="vps-grid" id="vps-list">
+            <!-- Default VPS will be injected here via JS -->
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div
+            class="icon"
+            style="
+              background: rgba(239, 68, 68, 0.15);
+              color: var(--accent-red);
+            "
+          >
+            📜
+          </div>
+          <h3>VPS Swarm Connection Logs</h3>
+        </div>
+        <div class="card-body">
+          <pre
+            id="vps-log"
+            style="
+              font-family: monospace;
+              font-size: 0.75rem;
+              color: var(--text-secondary);
+              white-space: pre-wrap;
+              max-height: 200px;
+              overflow-y: auto;
+              background: rgba(0, 0, 0, 0.3);
+              padding: 10px;
+              border-radius: 6px;
+            "
+          >
+Waiting for connection commands...</pre
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- PANE: VPS AI TERMINAL (IFRAME) -->
+    <div class="tab-pane iframe-pane" id="tab-vps-terminal">
+      <iframe id="vps-iframe"></iframe>
+    </div>
+
+    <!-- PANE: KNOWLEDGE ENGINE -->
+    <div class="tab-pane" id="tab-knowledge">
+      <div class="dashboard-grid">
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(168, 85, 247, 0.15);
+                color: var(--accent-purple);
+              "
+            >
+              🧠
+            </div>
+            <h3>Autonomous Knowledge Crawler</h3>
+          </div>
+          <div class="card-body">
+            <p
+              style="
+                color: var(--text-secondary);
+                margin-bottom: 15px;
+                font-size: 0.85rem;
+              "
+            >
+              One click to fully populate the Swarm's knowledge base. The
+              crawler automatically researches 36+ core programming topics
+              across verified sources (GitHub, StackOverflow, MDN, ArXiv) and
+              digests them into reusable patterns.
+            </p>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                margin-bottom: 15px;
+                align-items: center;
+              "
+            >
+              <button
+                class="btn btn-primary"
+                onclick="doAction('autonomous_crawl_start', {})"
+                id="btn-crawl"
+              >
+                <span>🤖 Start Crawl</span>
+              </button>
+              <button
+                class="btn btn-ghost"
+                onclick="doAction('autonomous_crawl_reset', {})"
+                id="btn-crawl-reset"
+                style="border: 1px solid var(--border)"
+              >
+                <span>🔄 Reset</span>
+              </button>
+              <span
+                id="crawl-badge"
+                style="
+                  margin-left: auto;
+                  padding: 4px 12px;
+                  border-radius: 999px;
+                  font-size: 0.7rem;
+                  font-weight: 700;
+                  background: rgba(100, 116, 139, 0.2);
+                  color: var(--text-muted);
+                "
+                >READY</span
+              >
+            </div>
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.4);
+                border-radius: 8px;
+                height: 24px;
+                overflow: hidden;
+                margin-bottom: 10px;
+                border: 1px solid var(--border);
+              "
+            >
+              <div
+                id="crawl-bar"
+                style="
+                  height: 100%;
+                  width: 0%;
+                  background: linear-gradient(
+                    90deg,
+                    var(--accent-purple),
+                    var(--accent-cyan)
+                  );
+                  transition: width 0.3s ease;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <span
+                  id="crawl-text"
+                  style="
+                    font-size: 0.65rem;
+                    font-weight: 700;
+                    color: white;
+                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+                  "
+                ></span>
+              </div>
+            </div>
+            <pre
+              id="crawl-log"
+              style="
+                font-family: monospace;
+                font-size: 0.7rem;
+                color: var(--text-secondary);
+                white-space: pre-wrap;
+                max-height: 100px;
+                overflow-y: auto;
+                background: rgba(0, 0, 0, 0.3);
+                padding: 10px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+              "
+            >
+Crawler idle. Click "Start Crawl" to begin.</pre
+            >
+          </div>
+        </div>
+
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(6, 182, 212, 0.15);
+                color: var(--accent-cyan);
+              "
+            >
+              🔍
+            </div>
+            <h3>Manual Query Investigation</h3>
+          </div>
+          <div class="card-body">
+            <div style="display: flex; flex-wrap: wrap; gap: 20px">
+              <div style="flex: 1; min-width: 300px">
+                <p
+                  style="
+                    color: var(--text-secondary);
+                    margin-bottom: 10px;
+                    font-size: 0.8rem;
+                  "
+                >
+                  Search Verified Technical Sources
+                </p>
+                <input
+                  type="text"
+                  id="search-query"
+                  placeholder="e.g. 'React server components patterns'"
+                />
+                <button
+                  class="btn btn-primary"
+                  style="margin-bottom: 20px"
+                  onclick="performSearch()"
+                >
+                  🔍 Search Web
+                </button>
+                <div
+                  id="search-results-container"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 15px;
+                    margin-top: 15px;
+                  "
+                ></div>
+              </div>
+              <div style="flex: 1; min-width: 300px">
+                <p
+                  style="
+                    color: var(--text-secondary);
+                    margin-bottom: 10px;
+                    font-size: 0.8rem;
+                  "
+                >
+                  Auto-Research & Digest Concept
+                </p>
+                <input
+                  type="text"
+                  id="auto-query"
+                  placeholder="e.g. 'Advanced TypeScript generics'"
+                />
+                <button
+                  class="btn btn-primary"
+                  style="
+                    background: var(--accent-purple);
+                    border-color: var(--accent-purple);
+                    margin-bottom: 20px;
+                  "
+                  onclick="autoResearchSwarm()"
+                >
+                  🧠 AI Digest Concept
+                </button>
+
+                <p
+                  style="
+                    color: var(--text-secondary);
+                    margin-bottom: 10px;
+                    margin-top: 10px;
+                    font-size: 0.8rem;
+                  "
+                >
+                  Manual Ingestion
+                </p>
+                <input
+                  type="text"
+                  id="learn-source"
+                  placeholder="Source Name"
+                />
+                <textarea
+                  id="learn-text"
+                  rows="3"
+                  placeholder="Paste literature..."
+                  style="
+                    width: 100%;
+                    padding: 10px;
+                    background: rgba(0, 0, 0, 0.3);
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    color: white;
+                    font-family: inherit;
+                    font-size: 0.85rem;
+                    margin-bottom: 10px;
+                    resize: vertical;
+                  "
+                ></textarea>
+                <button
+                  class="btn btn-ghost"
+                  onclick="teachSwarm()"
+                  id="btn-teach"
+                  style="border: 1px solid var(--border)"
+                >
+                  📚 Manual Digest
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(34, 197, 94, 0.15);
+                color: var(--accent-green);
+              "
+            >
+              🧬
+            </div>
+            <h3>Knowledge Base DB Viewer</h3>
+            <div
+              style="
+                margin-left: auto;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+              "
+            >
+              <input
+                type="text"
+                id="kb-search"
+                placeholder="Filter entries..."
+                style="
+                  width: 200px;
+                  margin: 0;
+                  padding: 6px 10px;
+                  font-size: 0.75rem;
+                "
+                oninput="filterKBTable(this.value)"
+              />
+              <button
+                class="btn btn-ghost"
+                style="padding: 4px 10px; font-size: 0.7rem"
+                onclick="refreshKnowledgeBase()"
+              >
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+          <div class="card-body" style="padding: 0">
+            <div style="overflow-y: auto; max-height: 350px">
+              <table
+                id="kb-table"
+                style="
+                  width: 100%;
+                  border-collapse: collapse;
+                  font-size: 0.8rem;
+                "
+              >
+                <thead>
+                  <tr
+                    style="
+                      background: rgba(0, 0, 0, 0.4);
+                      position: sticky;
+                      top: 0;
+                      z-index: 1;
+                    "
+                  >
+                    <th
+                      style="
+                        padding: 10px 12px;
+                        text-align: left;
+                        color: var(--text-muted);
+                        font-weight: 600;
+                        font-size: 0.7rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        border-bottom: 1px solid var(--border);
+                      "
+                    >
+                      Title
+                    </th>
+                    <th
+                      style="
+                        padding: 10px 12px;
+                        text-align: left;
+                        color: var(--text-muted);
+                        font-weight: 600;
+                        font-size: 0.7rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        border-bottom: 1px solid var(--border);
+                      "
+                    >
+                      Category
+                    </th>
+                    <th
+                      style="
+                        padding: 10px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-weight: 600;
+                        font-size: 0.7rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        border-bottom: 1px solid var(--border);
+                      "
+                    >
+                      Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="kb-table-body">
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#1): Autonomous Pipeline Design — Multi-Model Swarm
+                      Orchestration Patterns
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(168, 85, 247, 0.15);
+                          color: var(--accent-purple);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >Architecture, AI Pipelines, Orchestration</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.09
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#2): TypeScript Advanced Generics — Conditional
+                      Types & Template Literal Types
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(59, 130, 246, 0.15);
+                          color: var(--accent-blue);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >TypeScript, Type System, Patterns</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.09
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#3): FastAPI WebSocket Streaming — Real-time Event
+                      Bus Architecture
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(34, 197, 94, 0.15);
+                          color: var(--accent-green);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >Python, WebSocket, Backend</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.08
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#4): Reinforcement Learning from Builds — Automated
+                      Code Quality Evolution
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(245, 158, 11, 0.15);
+                          color: var(--accent-amber);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >AI, Machine Learning, Code Quality</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.08
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#5): Nginx Reverse Proxy — SSL Termination, Gzip,
+                      ETag Caching Patterns
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(6, 182, 212, 0.15);
+                          color: var(--accent-cyan);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >DevOps, Nginx, Networking</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.07
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#6): React Server Components — Data Fetching &
+                      Hydration Best Practices
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(239, 68, 68, 0.15);
+                          color: var(--accent-red);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >React, Frontend, SSR</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.07
+                    </td>
+                  </tr>
+                  <tr
+                    class="kb-row"
+                    style="
+                      border-bottom: 1px solid rgba(30, 41, 59, 0.3);
+                      cursor: pointer;
+                      transition: background 0.15s;
+                    "
+                    onmouseover="
+                      this.style.background = 'rgba(59,130,246,0.08)'
+                    "
+                    onmouseout="this.style.background = ''"
+                  >
+                    <td style="padding: 8px 12px; color: var(--text-primary)">
+                      Entry (#7): Vision OCR Pipeline — OpenCV Multi-Pass
+                      Detection & Badge Recognition
+                    </td>
+                    <td style="padding: 8px 12px">
+                      <span
+                        style="
+                          background: rgba(168, 85, 247, 0.15);
+                          color: var(--accent-purple);
+                          padding: 2px 8px;
+                          border-radius: 4px;
+                          font-size: 0.7rem;
+                        "
+                        >Computer Vision, OpenCV, Automation</span
+                      >
+                    </td>
+                    <td
+                      style="
+                        padding: 8px 12px;
+                        text-align: right;
+                        color: var(--text-muted);
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                      "
+                    >
+                      2026.03.06
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div
+              style="
+                padding: 10px 12px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
+              <span
+                style="color: var(--text-muted); font-size: 0.75rem"
+                id="kb-count"
+                >7 entries in knowledge base</span
+              >
+              <pre id="learned-result" style="display: none">
+Awaiting results...</pre
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Code Intelligence Suggestions -->
+        <div class="card full-width">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(59, 130, 246, 0.15);
+                color: var(--accent-blue);
+              "
+            >
+              💡
+            </div>
+            <h3>Code Intelligence — Quick Suggestions</h3>
+            <span
+              style="
+                margin-left: auto;
+                padding: 3px 10px;
+                border-radius: 999px;
+                font-size: 0.65rem;
+                font-weight: 700;
+                background: rgba(34, 197, 94, 0.15);
+                color: var(--accent-green);
+              "
+              >AI POWERED</span
+            >
+          </div>
+          <div class="card-body">
+            <p
+              style="
+                color: var(--text-secondary);
+                margin-bottom: 15px;
+                font-size: 0.8rem;
+              "
+            >
+              Pre-built code templates powered by the Swarm knowledge base.
+              Click to inject into Monaco editor.
+            </p>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 10px;
+              "
+            >
+              <div
+                onclick="injectSnippet('fastapi_websocket')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(59,130,246,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">🔌</span>
+                  <strong style="font-size: 0.85rem">WebSocket Server</strong>
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  FastAPI WebSocket endpoint with reconnection and heartbeat
+                </p>
+              </div>
+              <div
+                onclick="injectSnippet('ts_generic_pipeline')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(168,85,247,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">⛓️</span>
+                  <strong style="font-size: 0.85rem"
+                    >TypeScript Pipeline</strong
+                  >
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  Generic pipeline with type-safe middleware chain and error
+                  handling
+                </p>
+              </div>
+              <div
+                onclick="injectSnippet('react_hook_query')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(6,182,212,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">⚛️</span>
+                  <strong style="font-size: 0.85rem">React Data Hook</strong>
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  Custom useQuery hook with caching, retry, and loading states
+                </p>
+              </div>
+              <div
+                onclick="injectSnippet('docker_compose')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(34,197,94,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">🐳</span>
+                  <strong style="font-size: 0.85rem"
+                    >Docker Compose Stack</strong
+                  >
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  Full stack compose with Nginx, App, DB, Redis, and
+                  healthchecks
+                </p>
+              </div>
+              <div
+                onclick="injectSnippet('ollama_agent')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(245,158,11,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">🤖</span>
+                  <strong style="font-size: 0.85rem">Ollama Agent</strong>
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  Autonomous agent with tool-calling loop and context window
+                  management
+                </p>
+              </div>
+              <div
+                onclick="injectSnippet('test_suite')"
+                style="
+                  background: rgba(0, 0, 0, 0.3);
+                  border: 1px solid var(--border);
+                  border-radius: 8px;
+                  padding: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s;
+                "
+                onmouseover="this.style.borderColor = 'rgba(239,68,68,0.5)'"
+                onmouseout="this.style.borderColor = 'var(--border)'"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  "
+                >
+                  <span style="font-size: 1.1rem">🧪</span>
+                  <strong style="font-size: 0.85rem"
+                    >Test Suite Template</strong
+                  >
+                </div>
+                <p
+                  style="
+                    font-size: 0.75rem;
+                    color: var(--text-muted);
+                    margin: 0;
+                  "
+                >
+                  Vitest/Jest test suite with mocking, fixtures, and coverage
+                  config
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANE: FORGE PIPELINE -->
+    <div class="tab-pane flex-pane" id="tab-forge" style="padding: 20px">
+      <div style="display: flex; gap: 20px; flex-wrap: wrap">
+        <!-- Left Col: Control Panel & Status -->
+        <div
+          style="
+            flex: 1;
+            min-width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+          "
+        >
+          <div class="card">
+            <div class="card-header">
+              <h3>🔥 FORGE — Universal Code Pipeline</h3>
+            </div>
+            <div class="card-body">
+              <p
+                style="
+                  color: var(--text-secondary);
+                  font-size: 0.85rem;
+                  margin-bottom: 15px;
+                "
+              >
+                FORGE orchestrates multiple AI models to design, generate, lint,
+                test, and deploy code in any language. It uses Reinforcement
+                Learning from Builds (RLB) to evolve higher-quality code over
+                generations.
+              </p>
+              <div class="status-row">
+                <div class="status-label">Total Code Generations:</div>
+                <div class="status-value" id="forge-total-strats">--</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Passed Build Gates:</div>
+                <div
+                  class="status-value"
+                  style="color: var(--accent-green)"
+                  id="forge-passed-strats"
+                >
+                  --
+                </div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Best Quality Score:</div>
+                <div
+                  class="status-value"
+                  style="color: var(--accent-cyan)"
+                  id="forge-best-fitness"
+                >
+                  --
+                </div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Total FORGE Runs:</div>
+                <div class="status-value" id="forge-total-runs">--</div>
+              </div>
+              <hr
+                style="
+                  border: none;
+                  border-top: 1px solid var(--border);
+                  margin: 15px 0;
+                "
+              />
+              <button
+                class="btn btn-primary"
+                onclick="startForgeRun()"
+                style="width: 100%; margin-bottom: 10px"
+              >
+                🚀 Start Single Pipeline Run
+              </button>
+              <button
+                class="btn"
+                id="forge-auto-btn"
+                onclick="toggleAutonomousForge()"
+                style="
+                  width: 100%;
+                  background: var(--accent-purple);
+                  color: white;
+                "
+              >
+                🔄 Start 24/7 Autonomous Mode
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>🧠 Active AI Swarm</h3>
+            </div>
+            <div class="card-body" id="forge-swarm-list">
+              <!-- Swarm Models Populated Here -->
+              <div class="status-row">
+                <div class="status-label">qwen2.5-coder:7b</div>
+                <div class="status-value">Active (Code Generator)</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">deepseek-coder-v2</div>
+                <div class="status-value">Active (System Architect)</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">codellama:13b</div>
+                <div class="status-value">Active (Code Reviewer)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Middle Col: RLM & Knowledge -->
+        <div
+          style="
+            flex: 1;
+            min-width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+          "
+        >
+          <div class="card">
+            <div class="card-header">
+              <h3>🧬 Reinforcement Learning from Builds (RLB)</h3>
+            </div>
+            <div class="card-body">
+              <h4
+                style="
+                  color: var(--accent-green);
+                  font-size: 0.85rem;
+                  margin-bottom: 8px;
+                "
+              >
+                ✅ Winning Code Patterns
+              </h4>
+              <ul
+                id="forge-rlm-winners"
+                style="
+                  font-size: 0.8rem;
+                  color: var(--text-secondary);
+                  padding-left: 20px;
+                  margin-bottom: 15px;
+                "
+              >
+                <li>Loading learnings...</li>
+              </ul>
+              <h4
+                style="
+                  color: var(--accent-red);
+                  font-size: 0.85rem;
+                  margin-bottom: 8px;
+                "
+              >
+                ❌ Anti-Patterns to Avoid
+              </h4>
+              <ul
+                id="forge-rlm-losers"
+                style="
+                  font-size: 0.8rem;
+                  color: var(--text-secondary);
+                  padding-left: 20px;
+                  margin-bottom: 0;
+                "
+              >
+                <li>Loading learnings...</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>📚 Build Quality Gates</h3>
+            </div>
+            <div class="card-body" style="font-size: 0.85rem">
+              <div class="status-row">
+                <div class="status-label">Test Pass Rate</div>
+                <div class="status-value">55%</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Min Test Coverage</div>
+                <div class="status-value">80%</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Max Build Failures</div>
+                <div class="status-value">3</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Min Lint Score</div>
+                <div class="status-value">90</div>
+              </div>
+              <div class="status-row">
+                <div class="status-label">Cross-Platform Tests</div>
+                <div class="status-value" style="color: var(--accent-green)">
+                  Enabled
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Col: Results Log -->
+        <div
+          style="
+            flex: 2;
+            min-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+          "
+        >
+          <div
+            class="card"
+            style="flex: 1; display: flex; flex-direction: column"
+          >
+            <div class="card-header">
+              <h3>📋 FORGE Execution Log</h3>
+            </div>
+            <div
+              class="card-body event-log"
+              id="forge-log"
+              style="flex: 1; max-height: 450px; background: #050508"
+            >
+              <div class="event-entry">
+                <span class="event-time">System</span>
+                <span class="event-type type-meta">FORGE</span>
+                <span class="event-msg"
+                  >FORGE Engine initialized. Ready for autonomous code
+                  generation.</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANE: SETTINGS -->
+    <div
+      class="tab-pane flex-pane"
+      id="tab-settings"
+      style="flex-direction: row; padding: 20px; gap: 20px"
+    >
+      <div
+        style="
+          flex: 1;
+          max-width: 600px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        "
+      >
+        <div class="card">
+          <div class="card-header">
+            <h3>⚙️ System Limits & Resources</h3>
+          </div>
+          <div class="card-body">
+            <div style="margin-bottom: 20px">
+              <label for="ram-slider"
+                >Hardware Allocation: Ollama Maximum VRAM/RAM (GB)
+                <span
+                  id="ram-slider-val"
+                  style="
+                    float: right;
+                    font-weight: bold;
+                    color: var(--accent-blue);
+                  "
+                  >14 GB</span
+                ></label
+              >
+              <input
+                type="range"
+                id="ram-slider"
+                min="2"
+                max="64"
+                value="14"
+                step="1"
+                style="width: 100%"
+                oninput="
+                  document.getElementById('ram-slider-val').innerText =
+                    this.value + ' GB'
+                "
+              />
+              <small
+                style="
+                  color: var(--text-secondary);
+                  display: block;
+                  margin-top: 5px;
+                "
+                >This sets the `num_ctx` window scale and memory ceiling for
+                Swarm Models.</small
+              >
+            </div>
+
+            <div style="margin-bottom: 20px">
+              <label for="model-primary">Primary Orchestrator Engine</label>
+              <select
+                id="model-primary"
+                style="
+                  width: 100%;
+                  padding: 8px;
+                  border-radius: 4px;
+                  background: rgba(0, 0, 0, 0.5);
+                  color: white;
+                  border: 1px solid var(--border);
+                "
+              >
+                <option value="qwen2.5-coder:7b" selected>
+                  Qwen 2.5 Coder (7B)
+                </option>
+                <option value="deepseek-coder-v2:16b">
+                  DeepSeek Coder v2 (16B)
+                </option>
+                <option value="codellama:13b">CodeLlama (13B)</option>
+              </select>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveSettings()">
+              💾 Save Configurations
+            </button>
+            <div
+              id="settings-status"
+              style="
+                margin-top: 10px;
+                font-size: 0.85rem;
+                color: var(--accent-green);
+              "
+            ></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>🔥 FORGE Generation Policy</h3>
+          </div>
+          <div class="card-body">
+            <label
+              >Evolution Generations per Search
+              <span
+                id="evol-gen-val"
+                style="display: inline-block; margin-left: 10px"
+                >2</span
+              ></label
+            >
+            <input
+              type="range"
+              id="evol-gen"
+              min="1"
+              max="100"
+              value="2"
+              oninput="
+                document.getElementById('evol-gen-val').innerText = this.value
+              "
+            />
+
+            <label style="margin-top: 15px"
+              >Population Size per Generation
+              <span
+                id="evol-pop-val"
+                style="display: inline-block; margin-left: 10px"
+                >3</span
+              ></label
+            >
+            <input
+              type="range"
+              id="evol-pop"
+              min="2"
+              max="20"
+              value="3"
+              oninput="
+                document.getElementById('evol-pop-val').innerText = this.value
+              "
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        style="
+          flex: 1;
+          max-width: 600px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        "
+      >
+        <div class="card">
+          <div class="card-header">
+            <h3>🔐 Endpoint Connections</h3>
+          </div>
+          <div class="card-body">
+            <label>VegaMCP Core API Endpoint</label>
+            <input type="text" id="api-REDACTED" value="http://localhost:8000" />
+
+            <label>Swarm Network (VPS Control)</label>
+            <input type="text" id="api-vps" value="http://185.x.x.x:8000" />
+
+            <label>Default Build Tool Path</label>
+            <input type="text" id="api-compiler" value="npx tsc" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANE: OMNI-CLUSTER MONITOR -->
+    <div
+      class="tab-pane flex-pane"
+      id="tab-cluster"
+      style="flex-direction: column; padding: 20px; gap: 20px; overflow-y: auto"
+    >
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        "
+      >
+        <div>
+          <h2
+            style="
+              color: var(--accent-cyan);
+              font-size: 1.5rem;
+              font-weight: 700;
+              letter-spacing: 1px;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin: 0;
+            "
+          >
+            🦅 Omni-Cluster Monitor
+            <span
+              id="cluster-status-badge"
+              style="
+                padding: 4px 10px;
+                border-radius: 6px;
+                font-size: 0.7rem;
+                background: rgba(239, 68, 68, 0.2);
+                color: var(--accent-red);
+                border: 1px solid rgba(239, 68, 68, 0.3);
+              "
+              >OFFLINE</span
+            >
+          </h2>
+          <div
+            style="
+              color: var(--text-muted);
+              font-size: 0.85rem;
+              margin-top: 4px;
+            "
+          >
+            14-Agent Swarm Intelligence Engine & Omni-Streamer
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <button
+            class="btn btn-success"
+            id="btn-start-cluster"
+            onclick="toggleCluster(true)"
+            style="padding: 10px 20px; font-weight: 600"
+          >
+            ▶ Start Monitoring
+          </button>
+          <button
+            class="btn btn-danger"
+            id="btn-stop-cluster"
+            onclick="toggleCluster(false)"
+            style="padding: 10px 20px; font-weight: 600"
+            disabled
+          >
+            ⏹ Stop Monitoring
+          </button>
+        </div>
+      </div>
+
+      <style>
+        .cluster-subtabs {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 20px;
+          border-bottom: 1px solid var(--border);
+          padding-bottom: 10px;
+        }
+        .cluster-subtab {
+          padding: 8px 16px;
+          border-radius: 6px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 0.2s;
+          border: 1px solid transparent;
+        }
+        .cluster-subtab:hover {
+          color: var(--text-primary);
+          background: rgba(255, 255, 255, 0.05);
+        }
+        .cluster-subtab.active {
+          background: rgba(0, 212, 255, 0.1);
+          color: var(--accent-cyan);
+          border-color: rgba(0, 212, 255, 0.3);
+        }
+        .cluster-subpage {
+          display: none;
+          flex: 1;
+          min-height: 0;
+        }
+        .cluster-subpage.active {
+          display: flex;
+          flex-direction: column;
+        }
+      </style>
+
+      <div class="cluster-subtabs">
+        <div
+          class="cluster-subtab active"
+          onclick="showClusterTab('telemetry', this)"
+        >
+          🧠 Agent Telemetry
+        </div>
+        <div class="cluster-subtab" onclick="showClusterTab('signals', this)">
+          📡 Execution Log
+        </div>
+        <div class="cluster-subtab" onclick="showClusterTab('news', this)">
+          📰 Agent Health
+        </div>
+        <div
+          class="cluster-subtab"
+          onclick="showClusterTab('settings_tg', this)"
+        >
+          ⚙️ Notifications
+        </div>
+      </div>
+
+      <!-- Telemetry Tab -->
+      <div class="cluster-subpage active" id="cluster-telemetry">
+        <div class="card" style="max-width: 800px; margin: 0 auto; width: 100%">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(168, 85, 247, 0.2);
+                color: var(--accent-purple);
+              "
+            >
+              🧠
+            </div>
+            <h3>Swarm Performance Analysis</h3>
+          </div>
+          <div class="card-body">
+            <div style="margin-bottom: 20px">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  margin-bottom: 8px;
+                "
+              >
+                <span>AGENT UTILIZATION</span>
+                <span
+                  id="tri-bias"
+                  style="color: var(--text-muted); font-weight: 700"
+                  >MONITORING...</span
+                >
+              </div>
+              <div
+                style="
+                  height: 6px;
+                  background: rgba(0, 0, 0, 0.5);
+                  border-radius: 3px;
+                  overflow: hidden;
+                "
+              >
+                <div
+                  id="tri-bias-bar"
+                  style="
+                    height: 100%;
+                    width: 50%;
+                    background: var(--text-muted);
+                    transition: all 0.3s;
+                  "
+                ></div>
+              </div>
+            </div>
+            <div style="margin-bottom: 20px">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  margin-bottom: 8px;
+                "
+              >
+                <span>TASK THROUGHPUT</span>
+                <span
+                  id="tri-conviction"
+                  style="color: var(--text-primary); font-weight: 700"
+                  >0%</span
+                >
+              </div>
+              <div
+                style="
+                  height: 6px;
+                  background: rgba(0, 0, 0, 0.5);
+                  border-radius: 3px;
+                  overflow: hidden;
+                "
+              >
+                <div
+                  id="tri-conv-bar"
+                  style="
+                    height: 100%;
+                    width: 0%;
+                    background: var(--accent-cyan);
+                    transition: all 0.3s;
+                  "
+                ></div>
+              </div>
+            </div>
+            <div>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  margin-bottom: 8px;
+                "
+              >
+                <span>MEMORY PRESSURE</span>
+                <span
+                  id="tri-trap"
+                  style="color: var(--text-primary); font-weight: 700"
+                  >0%</span
+                >
+              </div>
+              <div
+                style="
+                  height: 6px;
+                  background: rgba(0, 0, 0, 0.5);
+                  border-radius: 3px;
+                  overflow: hidden;
+                "
+              >
+                <div
+                  id="tri-trap-bar"
+                  style="
+                    height: 100%;
+                    width: 0%;
+                    background: var(--accent-purple);
+                    transition: all 0.3s;
+                  "
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signals Tab -->
+      <div class="cluster-subpage" id="cluster-signals">
+        <div
+          class="card"
+          style="
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          "
+        >
+          <div class="card-header" style="justify-content: space-between">
+            <div style="display: flex; align-items: center; gap: 0.75rem">
+              <div
+                class="icon"
+                style="
+                  background: rgba(34, 197, 94, 0.2);
+                  color: var(--accent-green);
+                "
+              >
+                📡
+              </div>
+              <h3>Live Execution Log</h3>
+            </div>
+            <button
+              class="btn btn-ghost"
+              onclick="document.getElementById('cluster-log').innerHTML = ''"
+            >
+              🗑️ Clear Logs
+            </button>
+          </div>
+          <div
+            class="card-body event-log"
+            id="cluster-log"
+            style="
+              flex: 1;
+              overflow-y: auto;
+              background: #0d1117;
+              margin: 0px;
+              border-radius: 0 0 8px 8px;
+              border-top: none;
+              padding: 15px;
+              font-family: monospace;
+              font-size: 0.85rem;
+            "
+          >
+            <div class="event-entry">
+              <span class="event-time" style="color: var(--text-muted)"
+                >System</span
+              >
+              <span class="event-type type-meta">INFO</span>
+              <span class="event-msg"
+                >Omni-Cluster event bus ready. Streaming agent execution
+                events...</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- News Tab -->
+      <div class="cluster-subpage" id="cluster-news">
+        <div
+          class="card"
+          style="
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+          "
+        >
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(245, 158, 11, 0.2);
+                color: var(--accent-amber);
+              "
+            >
+              📰
+            </div>
+            <h3>Agent Health Dashboard</h3>
+          </div>
+          <div
+            class="card-body"
+            style="
+              flex: 1;
+              overflow-y: auto;
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+            "
+          >
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.3);
+                padding: 12px;
+                border-radius: 8px;
+                border-left: 3px solid var(--accent-red);
+              "
+            >
+              <div
+                style="
+                  font-size: 0.75rem;
+                  color: var(--text-muted);
+                  margin-bottom: 6px;
+                "
+              >
+                Agent #1 — Code Generator
+              </div>
+              <div
+                style="
+                  font-size: 1rem;
+                  color: var(--text-primary);
+                  font-weight: 700;
+                "
+              >
+                qwen2.5-coder:7b
+              </div>
+              <div
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-secondary);
+                  margin-top: 6px;
+                "
+              >
+                Status: Idle | Tasks: 142 | Uptime: 99.8%
+              </div>
+            </div>
+            <div
+              style="
+                background: rgba(0, 0, 0, 0.3);
+                padding: 12px;
+                border-radius: 8px;
+                border-left: 3px solid var(--accent-amber);
+              "
+            >
+              <div
+                style="
+                  font-size: 0.75rem;
+                  color: var(--text-muted);
+                  margin-bottom: 6px;
+                "
+              >
+                Agent #2 — System Architect
+              </div>
+              <div
+                style="
+                  font-size: 1rem;
+                  color: var(--text-primary);
+                  font-weight: 700;
+                "
+              >
+                deepseek-coder-v2:16b
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="cluster-subpage" id="cluster-settings_tg">
+        <div class="card" style="max-width: 600px; margin: 0 auto; width: 100%">
+          <div class="card-header">
+            <div
+              class="icon"
+              style="
+                background: rgba(14, 165, 233, 0.2);
+                color: var(--accent-blue);
+              "
+            >
+              📱
+            </div>
+            <h3>Notification Configuration</h3>
+          </div>
+          <div class="card-body">
+            <label
+              style="
+                display: block;
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+                margin-bottom: 6px;
+              "
+              >Bot Token</label
+            >
+            <input
+              type="password"
+              id="api-telegram-token"
+              placeholder="123456789:ABCdefg..."
+              style="
+                width: 100%;
+                padding: 10px;
+                border-radius: 6px;
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid var(--border);
+                color: white;
+                font-family: monospace;
+                margin-bottom: 20px;
+              "
+            />
+
+            <label
+              style="
+                display: block;
+                font-size: 0.85rem;
+                color: var(--text-secondary);
+                margin-bottom: 6px;
+              "
+              >Broadcast Channel ID</label
+            >
+            <input
+              type="text"
+              id="api-telegram-channel"
+              placeholder="-100xxxxxxx"
+              style="
+                width: 100%;
+                padding: 10px;
+                border-radius: 6px;
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid var(--border);
+                color: white;
+                font-family: monospace;
+                margin-bottom: 20px;
+              "
+            />
+
+            <button
+              class="btn btn-primary"
+              onclick="saveNotifConfig()"
+              style="width: 100%"
+            >
+              💾 Save Configuration
+            </button>
+            <div
+              id="tg-save-status"
+              style="
+                margin-top: 10px;
+                font-size: 0.85rem;
+                color: var(--accent-green);
+                text-align: center;
+              "
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = window.location.origin + "/api";
+
+      // Cluster Sub-tabs Logic
+      function showClusterTab(id, el) {
+        document
+          .querySelectorAll(".cluster-subtab")
+          .forEach((t) => t.classList.remove("active"));
+        document
+          .querySelectorAll(".cluster-subpage")
+          .forEach((p) => p.classList.remove("active"));
+        el.classList.add("active");
+        document.getElementById("cluster-" + id).classList.add("active");
+        localStorage.setItem("vegaclaw_cluster_subtab", id);
+      }
+
+      // Save Cluster UI Settings locally
+      function saveNotifConfig() {
+        const token = document.getElementById("api-telegram-token").value;
+        const channel = document.getElementById("api-telegram-channel").value;
+        localStorage.setItem("vegaclaw_tg_token", token);
+        localStorage.setItem("vegaclaw_tg_channel", channel);
+        document.getElementById("tg-save-status").innerText =
+          "Configuration Saved to Browser LocalStorage!";
+        setTimeout(
+          () => (document.getElementById("tg-save-status").innerText = ""),
+          3000,
+        );
+      }
+
+      // VPS State
+      let swarmNodes = [
+        {
+          id: "node-0",
+          ip: "185.x.x.x",
+          port: "8686",
+          status: "disconnected",
+          running: false,
+        },
+      ];
+      function switchTab(tabId, el) {
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) => t.classList.remove("active"));
+        if (el) {
+          el.classList.add("active");
+        } else {
+          let defaultTab = document.querySelector(`.tab[onclick*="${tabId}"]`);
+          if (defaultTab) defaultTab.classList.add("active");
+        }
+
+        document
+          .querySelectorAll(".tab-pane")
+          .forEach((p) => p.classList.remove("active"));
+        let targetPane = document.getElementById(tabId);
+        if (targetPane) {
+          targetPane.classList.add("active");
+        }
+        localStorage.setItem("vegaclaw_active_tab", tabId);
+      }
+      (function restoreActiveTab() {
+        const savedTab = localStorage.getItem("vegaclaw_active_tab");
+        if (savedTab && document.getElementById(savedTab)) {
+          const tabBtn = document.querySelector(
+            '[onclick*="' + savedTab + '"]',
+          );
+          switchTab(savedTab, tabBtn);
+        }
+        const savedSubTab = localStorage.getItem("vegaclaw_cluster_subtab");
+        if (savedSubTab && document.getElementById("cluster-" + savedSubTab)) {
+          const subBtn = document.querySelector(
+            '.cluster-subtab[onclick*="' + savedSubTab + '"]',
+          );
+          if (subBtn) showClusterTab(savedSubTab, subBtn);
+        }
+      })();
+
+      // Clock
+      setInterval(() => {
+        document.getElementById("clock").textContent =
+          new Date().toLocaleTimeString();
+      }, 1000);
+      document.getElementById("clock").textContent =
+        new Date().toLocaleTimeString();
+
+      // Cluster Monitor Logic
+      let clusterInterval = null;
+
+      // Auto Load from localstorage upon mount
+      setTimeout(() => {
+        const t = localStorage.getItem("vegaclaw_tg_token");
+        const c = localStorage.getItem("vegaclaw_tg_channel");
+        if (t) document.getElementById("api-telegram-token").value = t;
+        if (c) document.getElementById("api-telegram-channel").value = c;
+      }, 500);
+
+      async function toggleCluster(start) {
+        const btnStart = document.getElementById("btn-start-cluster");
+        const btnStop = document.getElementById("btn-stop-cluster");
+        const token = document.getElementById("api-telegram-token").value;
+        const channel = document.getElementById("api-telegram-channel").value;
+
+        try {
+          const action = start
+            ? "cluster_monitor_start"
+            : "cluster_monitor_stop";
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, config: { token, channel } }),
+          });
+          const data = await resp.json();
+
+          if (data.success) {
+            if (start) {
+              btnStart.disabled = true;
+              btnStop.disabled = false;
+              if (!clusterInterval)
+                clusterInterval = setInterval(fetchClusterStatus, 2000);
+            } else {
+              btnStart.disabled = false;
+              btnStop.disabled = true;
+              if (clusterInterval) {
+                clearInterval(clusterInterval);
+                clusterInterval = null;
+              }
+              fetchClusterStatus(); // final fetch
+            }
+          } else {
+            alert("VegaClaw Error: " + data.error);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function fetchClusterStatus() {
+        try {
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "cluster_monitor_status" }),
+          });
+          const data = await resp.json();
+          if (data.success && data.status) {
+            const s = data.status;
+            const badge = document.getElementById("cluster-status-badge");
+
+            if (s.status === "ONLINE") {
+              badge.textContent = "ONLINE";
+              badge.style.background = "rgba(34,197,94,0.2)";
+              badge.style.color = "var(--accent-green)";
+              badge.style.borderColor = "rgba(34,197,94,0.3)";
+              document.getElementById("btn-start-cluster").disabled = true;
+              document.getElementById("btn-stop-cluster").disabled = false;
+            } else {
+              badge.textContent = "OFFLINE";
+              badge.style.background = "rgba(239,68,68,0.2)";
+              badge.style.color = "var(--accent-red)";
+              badge.style.borderColor = "rgba(239,68,68,0.3)";
+              document.getElementById("btn-start-cluster").disabled = false;
+              document.getElementById("btn-stop-cluster").disabled = true;
+            }
+
+            // Bias Update
+            const bEl = document.getElementById("tri-bias");
+            const bBar = document.getElementById("tri-bias-bar");
+            bEl.textContent = s.bias || "WAITING...";
+            if (s.bias === "BULLISH") {
+              bEl.style.color = "var(--accent-green)";
+              bBar.style.background = "var(--accent-green)";
+              bBar.style.width = "100%";
+            } else if (s.bias === "BEARISH") {
+              bEl.style.color = "var(--accent-red)";
+              bBar.style.background = "var(--accent-red)";
+              bBar.style.width = "0%";
+            } else {
+              bEl.style.color = "var(--text-muted)";
+              bBar.style.background = "var(--text-muted)";
+              bBar.style.width = "50%";
+            }
+
+            // Numeric Updates
+            const cVal = s.conviction || 0;
+            const tVal = s.trap || 0;
+            document.getElementById("tri-conviction").textContent = cVal + "%";
+            document.getElementById("tri-conv-bar").style.width = cVal + "%";
+
+            document.getElementById("tri-trap").textContent = tVal + "%";
+            document.getElementById("tri-trap-bar").style.width = tVal + "%";
+
+            if (s.logs && s.logs.length > 0) {
+              const logEl = document.getElementById("cluster-log");
+              let html = "";
+              s.logs.forEach((l) => {
+                let typeClass = "type-meta";
+                if (l.type === "ACTION") typeClass = "type-action";
+                if (l.type === "ERROR") typeClass = "type-error";
+                html += `
+                                <div class="event-entry">
+                                    <span class="event-time" style="color:var(--text-muted);">${l.time}</span>
+                                    <span class="event-type ${typeClass}">${l.type}</span>
+                                    <span class="event-msg">${l.msg}</span>
+                                </div>
+                            `;
+              });
+              logEl.innerHTML = html;
+            }
+          }
+        } catch (e) {}
+      }
+
+      function clearClusterLog() {
+        document.getElementById("cluster-log").innerHTML = "";
+      }
+
+      function saveClusterConfig() {
+        alert(
+          "Notification configuration saved! Cluster will broadcast alerts on the next cycle.",
+        );
+      }
+
+      // Fetch status initially
+      setTimeout(fetchClusterStatus, 1000);
+
+      // Auto-connect to VPS Tunnel on load
+      setTimeout(() => toggleVPSConnection("node-0"), 1500);
+      function logVPS(msg) {
+        const el = document.getElementById("vps-log");
+        const time = new Date().toLocaleTimeString();
+        el.innerHTML += `\
+[${time}] ${msg}`;
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function renderSwarm() {
+        const list = document.getElementById("vps-list");
+        list.innerHTML = swarmNodes
+          .map(
+            (node) => `
+                <div class="vps-item">
+                    <div style="display:flex; justify-content:space-between;">
+                        <h4>Node: ${node.ip}</h4>
+                        <span class="status-dot ${node.running ? "dot-green" : "dot-red"}"></span>
+                    </div>
+                    <p>AI Port: ${node.port} | Status: ${node.status}</p>
+                    <div class="btn-group">
+                        <button class="btn ${node.running ? "btn-danger" : "btn-success"}" onclick="toggleVPSConnection('${node.id}')">
+                            ${node.running ? "⏹ Disconnect" : "▶ Connect Tunnel"}
+                        </button>
+                        ${node.running ? `<button class="btn btn-primary" onclick="openTerminal('${node.id}')">🤖 Open AI Terminal</button>` : ""}
+                    </div>
+                </div>
+            `,
+          )
+          .join("");
+      }
+
+      function addVPSNode() {
+        const ip = document.getElementById("vps-ip").value || "localhost";
+        const port = document.getElementById("vps-port").value || "8686";
+        const key = document.getElementById("vps-key").value;
+        const id = "node-" + Math.random().toString(36).substr(2, 9);
+        swarmNodes.push({ id, ip, port, key, status: "idle", running: false });
+        logVPS(`Added new node to swarm: ${ip}:${port}`);
+        renderSwarm();
+      }
+
+      async function toggleVPSConnection(id) {
+        const node = swarmNodes.find((n) => n.id === id);
+        if (!node) return;
+
+        if (node.running) {
+          // Kill tunnel simulation
+          node.running = false;
+          node.status = "disconnected";
+          logVPS(`Disconnected from ${node.ip}`);
+          if (document.getElementById("vps-iframe").src.includes(node.port)) {
+            document.getElementById("vps-iframe").src = "";
+            document.getElementById("tab-btn-vps").style.display = "none";
+            switchTab("tab-vps-mgr", document.querySelectorAll(".tab")[1]);
+          }
+          renderSwarm();
+          return;
+        }
+
+        node.status = "connecting...";
+        logVPS(`Initiating secure SSH tunnel to ${node.ip}:${node.port}...`);
+        renderSwarm();
+
+        // Perform actual backend call to start tunnel (Requires backend API update, simulated for now since python UI handles this)
+        try {
+          // To actually open tunnel from website, we need a new API endpoint. I will add one.
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "start_vps_tunnel",
+              ip: node.ip,
+              port: node.port,
+              key: node.key,
+            }),
+          });
+          const data = await resp.json();
+          if (data.success) {
+            node.running = true;
+            node.status = "connected";
+            logVPS(
+              `SSH Tunnel established successfully to ${node.ip}:${node.port}`,
+            );
+            // Automatically open the VPS array view and split mode
+            setTimeout(() => {
+              openTerminal(node.id);
+              if (!vpsSplitOpen) toggleVPSTerminalSplit();
+            }, 500);
+          } else {
+            node.status = "error";
+            logVPS(`Failed to connect to ${node.ip}: ` + data.error);
+          }
+        } catch (e) {
+          node.status = "error";
+          logVPS(`RPC Error connecting to ${node.ip}: ` + e.message);
+        }
+        renderSwarm();
+      }
+
+      function openTerminal(id) {
+        const node = swarmNodes.find((n) => n.id === id);
+        if (!node || !node.running) return;
+
+        document.getElementById("vps-iframe").src =
+          `http://localhost:${node.port}`;
+        const tabBtn = document.getElementById("tab-btn-vps");
+        tabBtn.style.display = "block";
+        tabBtn.textContent = `🤖 Terminal (${node.ip})`;
+        switchTab("tab-vps-terminal", tabBtn);
+        logVPS(`Viewing Terminal for node ${node.ip}`);
+      }
+
+      async function autoResearchSwarm() {
+        const query = document.getElementById("auto-query").value;
+        const domain = "trading";
+        const btn = document.getElementById("btn-auto");
+        const resultEl = document.getElementById("learned-result");
+
+        if (!query) {
+          alert("Please enter a research concept.");
+          return;
+        }
+
+        btn.innerHTML =
+          '<span><div class="status-dot dot-cyan"></div> Auto-Researching...</span>';
+        btn.disabled = true;
+        resultEl.textContent = `Scraping verified ${domain} sources and distilling logic via LLM...`;
+
+        try {
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "auto_research", query, domain }),
+          });
+          const data = await resp.json();
+
+          if (data.success) {
+            let sourceHtml = data.sources_used.join("\n");
+            resultEl.textContent =
+              `[+] Successfully Auto-Researched and Digested: ${query}\n[+] Total Concepts in Swarm KB: ${data.total_kb_size}\n[+] Sources Used:\n${sourceHtml}\n\n` +
+              JSON.stringify(data.learned, null, 2);
+            document.getElementById("auto-query").value = "";
+          } else {
+            resultEl.textContent = `[!] Error auto-researching: ${data.error}`;
+          }
+        } catch (e) {
+          resultEl.textContent = `[!] Network Error: ${e.message}`;
+        } finally {
+          btn.innerHTML = "<span>🚀 Auto-Research</span>";
+          btn.disabled = false;
+        }
+      }
+
+      async function teachSwarm() {
+        const source =
+          document.getElementById("learn-source").value || "Manual Text";
+        const text = document.getElementById("learn-text").value;
+        const btn = document.getElementById("btn-teach");
+        const resultEl = document.getElementById("learned-result");
+
+        if (!text) {
+          alert("Please paste some text to digest.");
+          return;
+        }
+
+        btn.innerHTML =
+          '<span><div class="status-dot dot-amber"></div> Digesting...</span>';
+        btn.disabled = true;
+        resultEl.textContent =
+          "AI is digesting literature and extracting algorithmic concepts...";
+
+        try {
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "teach_swarm", source, text }),
+          });
+          const data = await resp.json();
+
+          if (data.success) {
+            resultEl.textContent =
+              `[+] Successfully Digested: ${source}\n[+] Total Concepts in Swarm KB: ${data.total_kb_size}\n\n` +
+              JSON.stringify(data.learned, null, 2);
+            document.getElementById("learn-text").value = "";
+          } else {
+            resultEl.textContent = `[!] Error learning: ${data.error}`;
+          }
+        } catch (e) {
+          resultEl.textContent = `[!] Network Error: ${e.message}`;
+        } finally {
+          btn.innerHTML = "<span>📚 Digest Knowledge</span>";
+          btn.disabled = false;
+        }
+      }
+
+      async function performSearch() {
+        const query = document.getElementById("search-query").value;
+        const domain = "trading";
+        const container = document.getElementById("search-results-container");
+        const btn = document.getElementById("btn-search");
+
+        if (!query) return;
+
+        btn.innerHTML =
+          '<span><div class="status-dot dot-amber"></div> Searching...</span>';
+        btn.disabled = true;
+        container.innerHTML =
+          '<span style="color:var(--text-secondary); font-size:0.85rem;">Scraping verified sources asynchronously...</span>';
+
+        try {
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "search_verified", query, domain }),
+          });
+          const data = await resp.json();
+
+          if (data.success && data.results) {
+            if (data.total_results === 0) {
+              container.innerHTML = `<span style="color:var(--text-muted); font-size:0.85rem;">No results found for "${query}".</span>`;
+              return;
+            }
+
+            let html = `<div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:5px;">Found ${data.total_results} results in ${data.execution_time_seconds}s</div>`;
+
+            data.results.forEach((res) => {
+              let badgeColor = "rgba(100,116,139,0.2)";
+              let textColor = "var(--text-muted)";
+              if (res.source.includes("MQL5 Docs")) {
+                badgeColor = "rgba(34,197,94,0.2)";
+                textColor = "var(--accent-green)";
+              } else if (res.source.includes("PyPI")) {
+                badgeColor = "rgba(59,130,246,0.2)";
+                textColor = "var(--accent-blue)";
+              } else if (res.source.includes("Crates.io")) {
+                badgeColor = "rgba(245,158,11,0.2)";
+                textColor = "var(--accent-amber)";
+              } else if (res.source.includes("GitHub")) {
+                badgeColor = "rgba(168,85,247,0.2)";
+                textColor = "var(--accent-purple)";
+              } else if (res.source.includes("Investopedia")) {
+                badgeColor = "rgba(6,182,212,0.2)";
+                textColor = "var(--accent-cyan)";
+              } else if (
+                res.source.includes("ArXiv") ||
+                res.source.includes("StackOverflow")
+              ) {
+                badgeColor = "rgba(239,68,68,0.2)";
+                textColor = "var(--accent-red)";
+              } else {
+                badgeColor = "rgba(245,158,11,0.2)";
+                textColor = "var(--accent-amber)";
+              }
+
+              // We added an onclick handler so we can quickly teach the swarm from search results!
+              html += `
+                        <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <a href="${res.url}" target="_blank" style="color:var(--text-primary); text-decoration:none; font-weight:600; font-size:0.9rem; margin-bottom:6px; display:inline-block;">${res.title}</a>
+                                <span style="background:${badgeColor}; color:${textColor}; padding:2px 8px; border-radius:999px; font-size:0.65rem; font-weight:700; white-space:nowrap;">${res.source}</span>
+                            </div>
+                            <p style="color:var(--text-secondary); font-size:0.8rem; line-height:1.4; margin-bottom:10px;">${res.snippet}</p>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <a href="${res.url}" target="_blank" style="color:var(--accent-blue); font-size:0.7rem; text-decoration:none;">${res.url.substring(0, 60)}...</a>
+                                <button class="btn btn-ghost" style="padding:4px 8px; font-size:0.7rem;" onclick="document.getElementById('learn-source').value = '${res.url}'; document.getElementById('learn-text').value = \`${res.snippet.replace(/`/g, "\\`")}\`; switchTab('tab-knowledge');">
+                                    <span style="font-size:12px;">📚 Teach</span>
+                                </button>
+                            </div>
+                        </div>`;
+            });
+
+            container.innerHTML = html;
+          } else {
+            container.innerHTML = `<span style="color:var(--accent-red); font-size:0.85rem;">Error: ${data.error || "Failed to parse results"}</span>`;
+          }
+        } catch (e) {
+          container.innerHTML = `<span style="color:var(--accent-red); font-size:0.85rem;">Network Error: ${e.message}</span>`;
+        } finally {
+          btn.innerHTML = "<span>🔎 Search</span>";
+          btn.disabled = false;
+        }
+      }
+
+      let vpsSplitOpen = false;
+      function toggleVPSTerminalSplit() {
+        vpsSplitOpen = !vpsSplitOpen;
+        const pane = document.getElementById("terminal-vps-view");
+        pane.style.display = vpsSplitOpen ? "flex" : "none";
+        if (vpsSplitOpen) populateVPSSplitSelector();
+      }
+
+      function populateVPSSplitSelector() {
+        const sel = document.getElementById("vps-split-selector");
+        const runningNodes = swarmNodes.filter((n) => n.running);
+        if (runningNodes.length === 0) {
+          sel.innerHTML = '<option value="">-- No Active Nodes --</option>';
+        } else {
+          // If it is localhost, use the actual port, else format to the proxy domain
+          sel.innerHTML = runningNodes
+            .map(
+              (n) =>
+                `<option value="http://${n.ip === "localhost" ? "localhost" : n.ip}:${n.port}">Node ${n.ip}</option>`,
+            )
+            .join("");
+          updateSplitVPSUrl();
+        }
+      }
+
+      function updateSplitVPSUrl() {
+        const sel = document.getElementById("vps-split-selector");
+        const iframe = document.getElementById("terminal-vps-iframe");
+        if (sel.value) iframe.src = sel.value;
+      }
+
+      async function fetchGitDiff() {
+        const out = document.getElementById("git-diff-output");
+        out.textContent = "Fetching diff...";
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({ action: "git_diff" }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await resp.json();
+          if (data.success) {
+            // Make diffs look cool
+            let text = data.diff;
+            let styled = text
+              .split("\n")
+              .map((line) => {
+                if (line.startsWith("+"))
+                  return `<span style="color:var(--accent-green);">${line}</span>`;
+                if (line.startsWith("-"))
+                  return `<span style="color:var(--accent-red);">${line}</span>`;
+                if (line.startsWith("@@"))
+                  return `<span style="color:var(--accent-cyan);">${line}</span>`;
+                return line;
+              })
+              .join("\n");
+            out.innerHTML = styled || "No changes detected.";
+          } else {
+            out.textContent = "Error: " + data.error;
+          }
+        } catch (e) {
+          out.textContent = "Network error: " + e.message;
+        }
+      }
+
+      // --- Local Actions (from original code) ---
+      async function doAction(action, extraArgs = {}) {
+        const resultEl = document.getElementById("action-result");
+
+        // Only update text content if it's an interactive action, hide polling
+        if (action !== "detect" && action !== "monitor_log") {
+          resultEl.textContent = `Running ${action}...`;
+          // Briefly flash the status badge for user feedback
+          document.getElementById("status-badge").style.opacity = "0.5";
+          setTimeout(
+            () => (document.getElementById("status-badge").style.opacity = "1"),
+            200,
+          );
+        }
+
+        try {
+          const resp = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, ...extraArgs }),
+          });
+          const data = await resp.json();
+
+          if (action !== "detect" && action !== "monitor_log") {
+            if (data.analysis) {
+              resultEl.textContent =
+                "AI Vision Analysis:\\n" +
+                JSON.stringify(data.analysis, null, 2);
+            } else if (data.success && data.exe) {
+              resultEl.textContent =
+                "Launch successful!\\n" + JSON.stringify(data, null, 2);
+            } else {
+              resultEl.textContent = JSON.stringify(data, null, 2);
+            }
+          }
+
+          if (action === "detect" && data.mt5) updateStatus(data);
+          if (action === "monitor_log" && data.events)
+            updateLogDisplay(data.events);
+
+          // Immediately re-detect status if a launch/action occurred
+          if (action === "launch_mt5" || action === "launch_editor") {
+            setTimeout(() => doAction("detect"), 3000);
+          }
+        } catch (e) {
+          if (action !== "detect" && action !== "monitor_log") {
+            resultEl.textContent = "Error: " + e.message;
+          }
+        }
+      }
+
+      function updateStatus(data) {
+        if (data.mt5) {
+          const mt5 = data.mt5;
+          document.getElementById("mt5-status").innerHTML =
+            `<span class="status-dot ${mt5.running ? "dot-green" : "dot-red"}"></span>${mt5.running ? "Running" : "Stopped"}`;
+          document.getElementById("mt5-path").textContent =
+            mt5.paths?.terminal_exe || "—";
+          document.getElementById("mt5-data").textContent =
+            mt5.paths?.data_folder?.slice(-40) || "—";
+        }
+        if (data.secondary) {
+          const ed = data.secondary;
+          document.getElementById("editor-status").innerHTML =
+            `<span class="status-dot ${ed.running ? "dot-green" : "dot-red"}"></span>${ed.running ? "Running" : "Stopped"}`;
+          document.getElementById("editor-path").textContent =
+            ed.exe_path || "—";
+        }
+      }
+
+      function updateLogDisplay(events) {
+        const el = document.getElementById("event-log");
+
+        // Only rebuild HTML if length changed or new events, to avoid losing scroll position
+        if (el.children.length === events.length) return;
+
+        const isScrolledToBottom =
+          el.scrollHeight - el.clientHeight <= el.scrollTop + 1;
+
+        el.innerHTML = events
+          .map((e) => {
+            const t = new Date(e.timestamp * 1000).toLocaleTimeString();
+            return `<div class="event-entry">
+                    <span class="event-time">${t}</span>
+                    <span class="event-type type-${e.event_type}">${e.event_type}</span>
+                    <span class="event-msg">${e.message}</span>
+                </div>`;
+          })
+          .join("");
+
+        if (isScrolledToBottom) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }
+
+      // Initial fast loads
+      setTimeout(() => doAction("detect"), 500);
+      setTimeout(() => doAction("monitor_log"), 1000);
+
+      async function loadSettings() {
+        try {
+          const res = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            body: JSON.stringify({ action: "get_settings" }),
+          });
+          const data = await res.json();
+          if (data.status === "ok" && data.config) {
+            const c = data.config;
+            if (c.ram_gb) {
+              document.getElementById("ram-slider").value = c.ram_gb;
+              document.getElementById("ram-slider-val").innerText =
+                c.ram_gb + " GB";
+            }
+            if (c.primary_model)
+              document.getElementById("model-primary").value = c.primary_model;
+            if (c.evol_gen) {
+              document.getElementById("evol-gen").value = c.evol_gen;
+              document.getElementById("evol-gen-val").innerText = c.evol_gen;
+            }
+            if (c.evol_pop) {
+              document.getElementById("evol-pop").value = c.evol_pop;
+              document.getElementById("evol-pop-val").innerText = c.evol_pop;
+            }
+            if (c.vps_endpoint)
+              document.getElementById("api-vps").value = c.vps_endpoint;
+            if (c.compiler_path)
+              document.getElementById("api-compiler").value = c.compiler_path;
+          }
+        } catch (e) {
+          console.error("Failed to load settings", e);
+        }
+      }
+      setTimeout(loadSettings, 100);
+
+      // Polling background loops to keep UI live
+      setInterval(() => doAction("detect"), 5000);
+      async function startForgeRun() {
+        const btn = document.querySelector('button[onclick="startForgeRun()"]');
+        btn.innerHTML = "⚙️ Initiating Pipeline...";
+        btn.disabled = true;
+
+        try {
+          const res = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            body: JSON.stringify({
+              action: "forge_start_run",
+              strategy_desc:
+                "A robust TypeScript utility module with full test coverage",
+              generations:
+                parseInt(document.getElementById("evol-gen").value) || 2,
+              population:
+                parseInt(document.getElementById("evol-pop").value) || 3,
+            }),
+          });
+          const data = await res.json();
+          if (data.status === "ok") {
+            const log = document.getElementById("forge-log");
+            const entry = document.createElement("div");
+            entry.className = "event-entry";
+            entry.innerHTML = `<span class="event-time">${new Date().toLocaleTimeString()}</span><span class="event-type type-action">START</span><span class="event-msg">FORGE Run #${data.run_id} scheduled. Models warming up...</span>`;
+            log.appendChild(entry);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+
+        setTimeout(() => {
+          btn.innerHTML = "🚀 Start New Pipeline Run";
+          btn.disabled = false;
+        }, 5000);
+      }
+
+      let isAutonomous = false;
+      async function toggleAutonomousForge() {
+        const btn = document.getElementById("forge-auto-btn");
+        isAutonomous = !isAutonomous;
+
+        if (isAutonomous) {
+          btn.innerHTML = "🛑 Stop 24/7 Autonomous Mode";
+          btn.style.background = "var(--accent-red)";
+        } else {
+          btn.innerHTML = "🔄 Start 24/7 Autonomous Mode";
+          btn.style.background = "var(--accent-purple)";
+        }
+
+        try {
+          const res = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            body: JSON.stringify({
+              action: "forge_autonomous",
+              start: isAutonomous,
+              generations:
+                parseInt(document.getElementById("evol-gen").value) || 2,
+              population:
+                parseInt(document.getElementById("evol-pop").value) || 3,
+            }),
+          });
+          const data = await res.json();
+          if (data.status === "ok") {
+            const log = document.getElementById("forge-log");
+            const entry = document.createElement("div");
+            entry.className = "event-entry";
+            entry.innerHTML = `<span class="event-time">${new Date().toLocaleTimeString()}</span><span class="event-type type-meta">FORGE</span><span class="event-msg">${data.msg}</span>`;
+            log.appendChild(entry);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function saveSettings() {
+        const status = document.getElementById("settings-status");
+        status.innerHTML = "Saving...";
+        try {
+          const config = {
+            ram_gb: parseInt(document.getElementById("ram-slider").value),
+            primary_model: document.getElementById("model-primary").value,
+            evol_gen: parseInt(document.getElementById("evol-gen").value),
+            evol_pop: parseInt(document.getElementById("evol-pop").value),
+            vps_endpoint: document.getElementById("api-vps").value,
+            compiler_path: document.getElementById("api-compiler").value,
+          };
+
+          const res = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            body: JSON.stringify({
+              action: "save_settings",
+              config: config,
+            }),
+          });
+
+          if (res.ok) {
+            status.style.color = "var(--accent-green)";
+            status.innerHTML =
+              "✅ Saved successfully! Distributed config applied to Swarm.";
+            setTimeout(() => (status.innerHTML = ""), 3000);
+          } else {
+            status.style.color = "var(--accent-red)";
+            status.innerHTML = "❌ Failed to save config.";
+          }
+        } catch (e) {
+          console.error(e);
+          status.style.color = "var(--accent-red)";
+          status.innerHTML = "❌ Error saving config.";
+        }
+      }
+
+      async function updateForgeStats() {
+        if (!document.getElementById("tab-forge").classList.contains("active"))
+          return;
+        try {
+          const res = await fetch(`${API_BASE}/action`, {
+            method: "POST",
+            body: JSON.stringify({ action: "forge_status" }),
+          });
+          const data = await res.json();
+          if (data.status === "ok" && data.stats) {
+            document.getElementById("forge-total-strats").textContent =
+              data.stats.total_strategies || 0;
+            document.getElementById("forge-passed-strats").textContent =
+              data.stats.passed_strategies || 0;
+            document.getElementById("forge-best-fitness").textContent = data
+              .stats.best_fitness
+              ? data.stats.best_fitness.toFixed(1)
+              : 0;
+            document.getElementById("forge-total-runs").textContent =
+              data.stats.total_runs || 0;
+          }
+        } catch (e) {
+          console.error("Error fetching forge stats", e);
+        }
+      }
+
+      // Add to intervals
+      setInterval(updateForgeStats, 10000);
+
+      setInterval(async () => {
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({ action: "autonomous_crawl_status" }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await resp.json();
+          if (data.success && data.latest) {
+            const badge = document.getElementById("crawl-badge");
+            const bar = document.getElementById("crawl-bar");
+            const text = document.getElementById("crawl-text");
+            const log = document.getElementById("crawl-log");
+
+            if (data.running) {
+              badge.textContent = "RUNNING";
+              badge.style.background = "rgba(168,85,247,0.2)";
+              badge.style.color = "var(--accent-purple)";
+            } else if (data.done) {
+              badge.textContent = "FINISHED";
+              badge.style.background = "rgba(34,197,94,0.2)";
+              badge.style.color = "var(--accent-green)";
+            }
+
+            let total = data.latest.total || 1;
+            let current = data.latest.current || 0;
+            let pct = Math.round((current / total) * 100);
+            bar.style.width = pct + "%";
+            text.textContent = pct + "% (" + current + "/" + total + ")";
+
+            let phase = data.latest.phase
+              ? data.latest.phase.toUpperCase()
+              : "";
+            log.textContent = `[${phase}] Category: ${data.latest.category} - Query: ${data.latest.query}
+=> Status: ${data.latest.status}
+
+Total Swarm Memory Concepts: ${data.latest.total_kb_size}`;
+
+            if (data.done && data.final_result) {
+              log.textContent +=
+                "\n\nCRAWL COMPLETE. TOTAL NEW CONCEPTS: " +
+                data.final_result.new_concepts_learned;
+            }
+          }
+        } catch (e) {}
+      }, 3000);
+      setInterval(() => doAction("monitor_log"), 2000);
+
+      renderSwarm();
+
+      // ═══ CODE AUDIT TOOL ═══
+      async function runCodeAudit() {
+        const code = monacoEditor ? monacoEditor.getValue() : "";
+        const fileName = currentMonacoFile || "untitled";
+        const hist = document.getElementById("terminal-history");
+
+        if (!code || code.length < 10) {
+          const tip = document.createElement("div");
+          tip.className = "msg assistant";
+          tip.innerHTML =
+            '<span style="color:var(--accent-amber)">⚠️ Open a file in Monaco first, then click Code Audit to analyze it.</span>';
+          hist.appendChild(tip);
+          hist.scrollTop = hist.scrollHeight;
+          return;
+        }
+
+        const auditMsg = document.createElement("div");
+        auditMsg.className = "msg assistant";
+        auditMsg.innerHTML =
+          '<em style="color:var(--accent-cyan);">🔬 Running deep code audit...</em>';
+        hist.appendChild(auditMsg);
+        hist.scrollTop = hist.scrollHeight;
+
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "antigravity_code",
+              prompt: `Perform a comprehensive code audit on the following file (${fileName}). Analyze and report:
+
+1. **Security Issues** — SQL injection, XSS, hardcoded secrets, unsafe evals
+2. **Performance** — O(n²) loops, unnecessary re-renders, missing memoization, blocking I/O
+3. **Type Safety** — Missing types, any usage, unsafe casts
+4. **Error Handling** — Uncaught promise rejections, missing try/catch, silent failures
+5. **Code Smells** — God functions, magic numbers, dead code, poor naming
+6. **Upgrade Suggestions** — Modern syntax, better patterns, library alternatives
+
+For each issue, provide:
+- Severity: 🔴 Critical / 🟡 Warning / 🔵 Info
+- Line number (approximate)
+- Current code snippet
+- Suggested fix
+
+Code to audit:\n${code}`,
+              active_file: currentMonacoFile || "",
+              file_content: code,
+            }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await resp.json();
+          auditMsg.innerHTML =
+            '<strong style="color:var(--accent-cyan);">🔬 Code Audit Report</strong><br>' +
+            formatReply(data.reply || data.error || "No audit results.");
+
+          if (data.code && monacoEditor) {
+            auditMsg.innerHTML +=
+              '<br><button class="btn btn-primary" onclick="applyAuditFix()" style="margin-top:8px; font-size:0.8rem; padding:6px 12px;">✅ Apply Suggested Fixes</button>';
+            window._auditFixCode = data.code;
+          }
+        } catch (e) {
+          auditMsg.innerHTML =
+            '<span style="color:var(--accent-red)">Audit error: ' +
+            e.message +
+            "</span>";
+        }
+        hist.scrollTop = hist.scrollHeight;
+      }
+
+      function applyAuditFix() {
+        if (window._auditFixCode && monacoEditor) {
+          monacoEditor.setValue(window._auditFixCode);
+          const hist = document.getElementById("terminal-history");
+          const msg = document.createElement("div");
+          msg.className = "msg assistant";
+          msg.innerHTML =
+            '<strong style="color:var(--accent-green);">✅ Audit fixes applied to Monaco.</strong> Review the changes and save when ready.';
+          hist.appendChild(msg);
+          hist.scrollTop = hist.scrollHeight;
+          // Switch to Monaco view
+          const codeTab = document.querySelector(
+            '.view-tab[onclick*="view-code"]',
+          );
+          if (codeTab) switchViewTab("view-code", codeTab);
+        }
+      }
+
+      // ═══ KNOWLEDGE BASE TABLE ═══
+      function filterKBTable(query) {
+        const rows = document.querySelectorAll(".kb-row");
+        const q = query.toLowerCase();
+        let visible = 0;
+        rows.forEach((row) => {
+          const text = row.textContent.toLowerCase();
+          const show = !q || text.includes(q);
+          row.style.display = show ? "" : "none";
+          if (show) visible++;
+        });
+        document.getElementById("kb-count").textContent =
+          visible + " entries shown";
+      }
+
+      async function refreshKnowledgeBase() {
+        try {
+          const resp = await fetch(API_BASE + "/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "get_knowledge_base" }),
+          });
+          const data = await resp.json();
+          if (data.success && data.entries) {
+            const tbody = document.getElementById("kb-table-body");
+            const colors = [
+              { bg: "rgba(168,85,247,0.15)", fg: "var(--accent-purple)" },
+              { bg: "rgba(59,130,246,0.15)", fg: "var(--accent-blue)" },
+              { bg: "rgba(34,197,94,0.15)", fg: "var(--accent-green)" },
+              { bg: "rgba(245,158,11,0.15)", fg: "var(--accent-amber)" },
+              { bg: "rgba(6,182,212,0.15)", fg: "var(--accent-cyan)" },
+              { bg: "rgba(239,68,68,0.15)", fg: "var(--accent-red)" },
+            ];
+            tbody.innerHTML = data.entries
+              .map((e, i) => {
+                const c = colors[i % colors.length];
+                return `<tr class="kb-row" style="border-bottom:1px solid rgba(30,41,59,0.3); cursor:pointer; transition:background 0.15s;" onmouseover="this.style.background='rgba(59,130,246,0.08)'" onmouseout="this.style.background=''">
+                            <td style="padding:8px 12px; color:var(--text-primary);">${e.title}</td>
+                            <td style="padding:8px 12px;"><span style="background:${c.bg}; color:${c.fg}; padding:2px 8px; border-radius:4px; font-size:0.7rem;">${e.category}</span></td>
+                            <td style="padding:8px 12px; text-align:right; color:var(--text-muted); font-family:monospace; font-size:0.75rem; white-space:nowrap;">${e.date}</td>
+                        </tr>`;
+              })
+              .join("");
+            document.getElementById("kb-count").textContent =
+              data.entries.length + " entries in knowledge base";
+          }
+        } catch (e) {
+          console.error("KB refresh error", e);
+        }
+      }
+
+      // ═══ CODE SNIPPET INJECTION ═══
+      const SNIPPETS = {
+        fastapi_websocket: `from fastapi import FastAPI, WebSocket, WebSocketDisconnect\nimport asyncio\n\napp = FastAPI()\nclients: list[WebSocket] = []\n\n@app.websocket("/ws")\nasync def websocket_endpoint(ws: WebSocket):\n    await ws.accept()\n    clients.append(ws)\n    try:\n        while True:\n            data = await ws.receive_text()\n            # Broadcast to all connected clients\n            for client in clients:\n                if client != ws:\n                    await client.send_text(data)\n    except WebSocketDisconnect:\n        clients.remove(ws)\n\n@app.get("/health")\nasync def health():\n    return {"status": "ok", "clients": len(clients)}`,
+
+        ts_generic_pipeline: `type Middleware<T> = (ctx: T, next: () => Promise<void>) => Promise<void>;\n\nclass Pipeline<T> {\n  private stack: Middleware<T>[] = [];\n\n  use(fn: Middleware<T>): this {\n    this.stack.push(fn);\n    return this;\n  }\n\n  async execute(ctx: T): Promise<T> {\n    let index = -1;\n    const dispatch = async (i: number): Promise<void> => {\n      if (i <= index) throw new Error('next() called multiple times');\n      index = i;\n      const fn = this.stack[i];\n      if (fn) await fn(ctx, () => dispatch(i + 1));\n    };\n    await dispatch(0);\n    return ctx;\n  }\n}\n\n// Usage:\nconst pipeline = new Pipeline<{ data: string; logs: string[] }>();\npipeline\n  .use(async (ctx, next) => { ctx.logs.push('start'); await next(); })\n  .use(async (ctx, next) => { ctx.data = ctx.data.toUpperCase(); await next(); })\n  .use(async (ctx) => { ctx.logs.push('done'); });`,
+
+        react_hook_query: `import { useState, useEffect, useCallback, useRef } from 'react';\n\ninterface UseQueryOptions<T> {\n  queryFn: () => Promise<T>;\n  enabled?: boolean;\n  refetchInterval?: number;\n  retry?: number;\n  cacheKey?: string;\n}\n\nconst cache = new Map<string, { data: any; timestamp: number }>();\nconst CACHE_TTL = 30_000;\n\nexport function useQuery<T>({ queryFn, enabled = true, refetchInterval, retry = 3, cacheKey }: UseQueryOptions<T>) {\n  const [data, setData] = useState<T | null>(null);\n  const [error, setError] = useState<Error | null>(null);\n  const [isLoading, setIsLoading] = useState(false);\n  const retryCount = useRef(0);\n\n  const fetchData = useCallback(async () => {\n    if (cacheKey) {\n      const cached = cache.get(cacheKey);\n      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {\n        setData(cached.data);\n        return;\n      }\n    }\n    setIsLoading(true);\n    try {\n      const result = await queryFn();\n      setData(result);\n      setError(null);\n      retryCount.current = 0;\n      if (cacheKey) cache.set(cacheKey, { data: result, timestamp: Date.now() });\n    } catch (err) {\n      if (retryCount.current < retry) {\n        retryCount.current++;\n        setTimeout(fetchData, 1000 * retryCount.current);\n      } else {\n        setError(err as Error);\n      }\n    } finally { setIsLoading(false); }\n  }, [queryFn, retry, cacheKey]);\n\n  useEffect(() => { if (enabled) fetchData(); }, [enabled, fetchData]);\n  useEffect(() => {\n    if (!refetchInterval || !enabled) return;\n    const id = setInterval(fetchData, refetchInterval);\n    return () => clearInterval(id);\n  }, [refetchInterval, enabled, fetchData]);\n\n  return { data, error, isLoading, refetch: fetchData };\n}`,
+
+        docker_compose: `version: '3.8'\nservices:\n  nginx:\n    image: nginx:alpine\n    ports: ["80:80", "443:443"]\n    volumes: ["./nginx.conf:/etc/nginx/nginx.conf:ro"]\n    depends_on: { app: { condition: service_healthy } }\n\n  app:\n    build: .\n    environment:\n      - NODE_ENV=production\n      - DATABASE_URL=postgres://user:pass@db:5432/appdb\n      - REDIS_URL=redis://redis:6379\n    healthcheck:\n      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]\n      interval: 10s\n      retries: 3\n    depends_on: { db: { condition: service_healthy }, redis: { condition: service_started } }\n\n  db:\n    image: postgres:16-alpine\n    environment: { POSTGRES_USER: user, POSTGRES_PASSWORD: pass, POSTGRES_DB: appdb }\n    volumes: ["pgdata:/var/lib/postgresql/data"]\n    healthcheck:\n      test: ["CMD-SHELL", "pg_isready -U user -d appdb"]\n      interval: 5s\n\n  redis:\n    image: redis:7-alpine\n    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru\n\nvolumes:\n  pgdata:`,
+
+        ollama_agent: `import ollama from 'ollama';\n\ninterface Tool { name: string; description: string; execute: (args: any) => Promise<string>; }\n\nconst tools: Tool[] = [\n  { name: 'read_file', description: 'Read file contents', execute: async ({path}) => fs.readFileSync(path, 'utf8') },\n  { name: 'write_file', description: 'Write content to file', execute: async ({path, content}) => { fs.writeFileSync(path, content); return 'Written'; } },\n  { name: 'run_command', description: 'Execute shell command', execute: async ({cmd}) => execSync(cmd, {encoding:'utf8'}) },\n];\n\nasync function agentLoop(task: string, model = 'qwen2.5-coder:7b', maxSteps = 10) {\n  const messages = [{ role: 'system', content: 'You are an autonomous coding agent.' }, { role: 'user', content: task }];\n\n  for (let step = 0; step < maxSteps; step++) {\n    const response = await ollama.chat({ model, messages, tools: tools.map(t => ({\n      type: 'function', function: { name: t.name, description: t.description, parameters: {} }\n    }))});\n\n    messages.push(response.message);\n\n    if (!response.message.tool_calls?.length) {\n      console.log('Agent finished:', response.message.content);\n      return response.message.content;\n    }\n\n    for (const call of response.message.tool_calls) {\n      const tool = tools.find(t => t.name === call.function.name);\n      const result = tool ? await tool.execute(call.function.arguments) : 'Tool not found';\n      messages.push({ role: 'tool', content: result });\n    }\n  }\n}`,
+
+        test_suite: `import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';\n\n// Mock external dependencies\nvi.mock('./database', () => ({\n  query: vi.fn(),\n  connect: vi.fn().mockResolvedValue(true),\n}));\n\nimport { query, connect } from './database';\nimport { UserService } from './user-service';\n\ndescribe('UserService', () => {\n  let service: UserService;\n\n  beforeEach(() => {\n    vi.clearAllMocks();\n    service = new UserService();\n  });\n\n  afterEach(() => { vi.restoreAllMocks(); });\n\n  describe('getUser', () => {\n    it('should return user by ID', async () => {\n      const mockUser = { id: '1', name: 'Test User', email: 'test@example.com' };\n      vi.mocked(query).mockResolvedValueOnce({ rows: [mockUser] });\n\n      const user = await service.getUser('1');\n      expect(user).toEqual(mockUser);\n      expect(query).toHaveBeenCalledWith('SELECT * FROM users WHERE id = $1', ['1']);\n    });\n\n    it('should throw if user not found', async () => {\n      vi.mocked(query).mockResolvedValueOnce({ rows: [] });\n      await expect(service.getUser('999')).rejects.toThrow('User not found');\n    });\n\n    it('should handle database errors gracefully', async () => {\n      vi.mocked(query).mockRejectedValueOnce(new Error('Connection lost'));\n      await expect(service.getUser('1')).rejects.toThrow('Connection lost');\n    });\n  });\n});`,
+      };
+
+      function injectSnippet(key) {
+        const code = SNIPPETS[key];
+        if (!code) return;
+        if (monacoEditor) {
+          monacoEditor.setValue(code);
+          // Auto-detect language
+          const langMap = {
+            fastapi_websocket: "python",
+            ts_generic_pipeline: "typescript",
+            react_hook_query: "typescript",
+            docker_compose: "yaml",
+            ollama_agent: "typescript",
+            test_suite: "typescript",
+          };
+          if (langMap[key])
+            monaco.editor.setModelLanguage(
+              monacoEditor.getModel(),
+              langMap[key],
+            );
+          // Switch to Monaco view
+          const codeTab = document.querySelector(
+            '.view-tab[onclick*="view-code"]',
+          );
+          if (codeTab) switchViewTab("view-code", codeTab);
+        } else {
+          // If Monaco not initialized, switch to it first
+          const codeTab = document.querySelector(
+            '.view-tab[onclick*="view-code"]',
+          );
+          if (codeTab) {
+            switchViewTab("view-code", codeTab);
+            setTimeout(() => {
+              if (monacoEditor) monacoEditor.setValue(code);
+            }, 1500);
+          }
+        }
+      }
+
+      renderSwarm();
+    </script>
+  </body>
+</html>

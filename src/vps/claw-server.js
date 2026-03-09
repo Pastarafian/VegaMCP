@@ -2563,7 +2563,7 @@ async function pollTelegram() {
 const HTML_RAW = fs.readFileSync('/opt/claw-gui.html', 'utf8');
 const HTML_GZIPPED = zlib.gzipSync(Buffer.from(HTML_RAW, 'utf8'), { level: 9 });
 const HTML_ETAG = '"' + crypto.createHash('md5').update(HTML_RAW).digest('hex') + '"';
-const AUTH_PASSWORD = process.env.CLAW_PASSWORD || 'REDACTED_PASSWORD';
+const AUTH_PASSWORD = process.env.CLAW_PASSWORD || '';
 const AUTH_TOKEN = Buffer.from('vega:' + AUTH_PASSWORD).toString('base64');
 
 // ═══════════════════════════════════════════════════════════════
