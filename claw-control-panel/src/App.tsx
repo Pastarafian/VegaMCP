@@ -350,42 +350,94 @@ export default function App() {
         </div>
         
         <div className="mtclaw-subtabs" style={{ marginTop: 20 }}>
-          <div className={`mtclaw-subtab ${subTab === 'telemetry' ? 'active' : ''}`} onClick={() => setSubTab('telemetry')}>Swarm Telemetry</div>
-          <div className={`mtclaw-subtab ${subTab === 'logs' ? 'active' : ''}`} onClick={() => setSubTab('logs')}>Execution Logs</div>
+          <div className={`mtclaw-subtab ${subTab === 'telemetry' ? 'active' : ''}`} onClick={() => setSubTab('telemetry')}>🧠 Omni-Cluster Telemetry</div>
+          <div className={`mtclaw-subtab ${subTab === 'logs' ? 'active' : ''}`} onClick={() => setSubTab('logs')}>📡 Execution Broadcasts</div>
+          <div className={`mtclaw-subtab ${subTab === 'agents' ? 'active' : ''}`} onClick={() => setSubTab('agents')}>🤖 Agent Radar</div>
+          <div className={`mtclaw-subtab ${subTab === 'config' ? 'active' : ''}`} onClick={() => setSubTab('config')}>⚙️ Swarm Config</div>
         </div>
 
-        {subTab === 'telemetry' && (
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, maxWidth: 800, margin: '0 auto', width: '100%' }}>
-            <h3 style={{ fontSize: 16, color: 'var(--text)', marginBottom: 20, display: 'flex', gap: 8 }}>🧠 Multi-Agent Load Distribution</h3>
-            
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
-                <span>VISION ENGINE LOAD</span> <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>24%</span>
-              </div>
-              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: '24%', background: 'var(--cyan)', transition: 'all 0.3s' }}></div>
-              </div>
-            </div>
-            
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
-                <span>LLM REASONING</span> <span style={{ color: 'var(--purple)', fontWeight: 600 }}>12%</span>
-              </div>
-              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: '12%', background: 'var(--purple)', transition: 'all 0.3s' }}></div>
-              </div>
-            </div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 
-             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
-                <span>SYSTEM MEMORY</span> <span style={{ color: 'var(--green)', fontWeight: 600 }}>64%</span>
+          {/* Telemetry Tab */}
+          <div className={`mtclaw-subpage ${subTab === 'telemetry' ? 'active' : ''}`}>
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, maxWidth: 800, margin: '0 auto', width: '100%' }}>
+              <h3 style={{ fontSize: 16, color: 'var(--text)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>🧠 Omni-Cluster Live Analysis</h3>
+              
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                  <span>VISION ENGINE LOAD</span> <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>24%</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '24%', background: 'var(--cyan)', transition: 'all 0.3s' }}></div>
+                </div>
               </div>
-              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: '64%', background: 'var(--green)', transition: 'all 0.3s' }}></div>
+              
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                  <span>LLM REASONING ALLOCATION</span> <span style={{ color: 'var(--purple)', fontWeight: 600 }}>12%</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '12%', background: 'var(--purple)', transition: 'all 0.3s' }}></div>
+                </div>
+              </div>
+
+               <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                  <span>SYSTEM MEMORY</span> <span style={{ color: 'var(--green)', fontWeight: 600 }}>64%</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '64%', background: 'var(--green)', transition: 'all 0.3s' }}></div>
+                </div>
               </div>
             </div>
           </div>
-        )}
+
+          {/* Logs Tab */}
+          <div className={`mtclaw-subpage ${subTab === 'logs' ? 'active' : ''}`}>
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+              <div style={{ padding: 16, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: 14, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>📡 Swarm Action History</h3>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'JetBrains Mono', monospace" }}>Engines: 14 | Active: 3</div>
+              </div>
+              <div style={{ flex: 1, padding: 16, overflowY: 'auto', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, display: 'flex', flexDirection: 'column', gap: 10, background: '#0d1117' }}>
+                <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Waiting for Swarm initialization...</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agents Tab */}
+          <div className={`mtclaw-subpage ${subTab === 'agents' ? 'active' : ''}`}>
+             <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, maxWidth: 800, margin: '0 auto', width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: 16, color: 'var(--text)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>🤖 Agent Radar Status</h3>
+              <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                 <div style={{ background: 'var(--bg3)', padding: 12, borderRadius: 8, borderLeft: '3px solid var(--cyan)' }}>
+                   <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Root Authority (High Impact)</div>
+                   <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600 }}>Command Execution Engine</div>
+                   <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>State: LISTENING | Port: 4280</div>
+                 </div>
+                 <div style={{ background: 'var(--bg3)', padding: 12, borderRadius: 8, borderLeft: '3px solid var(--purple)' }}>
+                   <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Vision Processing (Med Impact)</div>
+                   <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600 }}>VegaOCR Sandbox</div>
+                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Settings Tab */}
+          <div className={`mtclaw-subpage ${subTab === 'config' ? 'active' : ''}`}>
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, maxWidth: 600, margin: '0 auto', width: '100%' }}>
+              <h3 style={{ fontSize: 16, color: 'var(--text)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>⚙️ Swarm Telegram Sync</h3>
+              <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Bot Token</label>
+              <input type="password" placeholder="123456:ABC..." style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--border)', padding: '10px 14px', borderRadius: 6, color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, marginBottom: 16, outline: 'none' }} />
+              
+              <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Group ID</label>
+              <input type="text" placeholder="e.g. -100123..." style={{ width: '100%', background: 'var(--bg3)', border: '1px solid var(--border)', padding: '10px 14px', borderRadius: 6, color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, marginBottom: 20, outline: 'none' }} />
+              
+              <button style={{ width: '100%', padding: 10, borderRadius: 6, background: 'var(--cyan)', color: '#000', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.2s' }}>Save Credentials LocalStorage</button>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* TAB: SETTINGS */}
