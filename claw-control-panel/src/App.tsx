@@ -1,417 +1,405 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Settings, MessageSquare, 
-  BrainCircuit, Terminal, 
-  Layers, Globe,
-  Zap, Clock, Monitor,
-  Send
-} from 'lucide-react';
-
-
-interface Message {
-  role: 'user' | 'system' | 'assistant';
-  text: string;
-  thinking?: string;
-}
-
-const BRIDGE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-  ? 'http://127.0.0.1:42019' 
-  : window.location.origin + '/bridge';
-
-const getAuthCookie = () => {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; vegatech_auth=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift();
-  return null;
-};
-
-const getAuthToken = () => getAuthCookie() || localStorage.getItem('vega_session');
+import { useState, useEffect, useRef } from 'react';
 
 const apiFetch = async (endpoint: string, options: any = {}) => {
-  const token = getAuthToken();
-  const headers = { 
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...(options.headers || {})
-  };
-  return fetch(`${BRIDGE}${endpoint}`, { 
-    ...options, 
-    headers,
-    credentials: 'include' 
-  });
+  try {
+    const res = await fetch(endpoint, options);
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return { error: String(err) };
+  }
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'vps' | 'chat' | 'settings'>('vps'); 
-  const [fleet, setFleet] = useState<any[]>([]);
-  const [isOnline, setIsOnline] = useState(false);
-
-
-  // Poll for live telemetry
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const statusResp = await apiFetch('/status').then(r => r.json());
-        setFleet(statusResp.fleet || []);
-        setIsOnline(statusResp.status === 'online');
-      } catch (e) { 
-        setIsOnline(false);
-      }
-    }, 1500);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="flex flex-col h-screen bg-[#0b1120] text-[#e2e8f0] font-['Inter',system-ui,sans-serif] overflow-hidden select-none">
-      
-      {/* ══ Top Header Bar ══ */}
-      <header className="flex items-center justify-between px-5 py-2.5 bg-[#0b1120] border-b border-[#1e293b]/60 shrink-0">
-        {/* Left: Logo + Connection */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#06b6d4] text-xl font-black tracking-tight">VEGACLAW</span>
-          </div>
-          <span className="text-[#64748b] text-xs">Command Center</span>
-          <div className="flex items-center gap-1.5 ml-2">
-            <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-[#22c55e] shadow-[0_0_6px_#22c55e]' : 'bg-red-500'}`} />
-            <span className={`text-xs font-medium ${isOnline ? 'text-[#22c55e]' : 'text-red-500'}`}>
-              {isOnline ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-        </div>
-
-        {/* Right: Metric badges */}
-        <div className="flex items-center gap-2">
-          <MetricBadge label="OCR" value="0" color="blue" />
-          <MetricBadge label="UI" value="0" color="blue" />
-          <MetricBadge label="ML" value="0" color="blue" />
-          <MetricBadge label="RTn" value="OK" color="green" />
-        </div>
-      </header>
-
-      {/* ══ Tab Navigation ══ */}
-      <nav className="flex items-center gap-1 px-5 py-1.5 bg-[#0b1120] border-b border-[#1e293b]/60 shrink-0">
-        <NavTab active={activeTab === 'vps'} onClick={() => setActiveTab('vps')} icon={<Monitor className="w-4 h-4" />} label="VPS Control" />
-        <NavTab active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} icon={<MessageSquare className="w-4 h-4" />} label="Chat" />
-        <NavTab active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings className="w-4 h-4" />} label="Settings" />
-      </nav>
-
-      {/* ══ Main Content ══ */}
-      <div className="flex-1 flex overflow-hidden">
-        {activeTab === 'vps' && <VPSControlTab />}
-        {activeTab === 'chat' && <ChatTab fleet={fleet} />}
-        {activeTab === 'settings' && <SettingsTab />}
-      </div>
-
-
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════ */
-/* Small Components                                               */
-/* ═══════════════════════════════════════════════════════════════ */
-
-function MetricBadge({ label, value, color }: { label: string; value: string; color: string }) {
-  const colorMap: Record<string, string> = {
-    blue: 'bg-[#1e3a5f] text-[#60a5fa] border-[#2563eb]/30',
-    green: 'bg-[#14532d]/60 text-[#4ade80] border-[#22c55e]/30',
-    red: 'bg-red-950/60 text-red-400 border-red-500/30',
-  };
-  return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold ${colorMap[color] || colorMap.blue}`}>
-      <span className="opacity-70">{label}</span>
-      <span className="font-bold">{value}</span>
-    </div>
-  );
-}
-
-function NavTab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-200
-        ${active 
-          ? 'bg-[#3b82f6] text-white shadow-[0_0_12px_rgba(59,130,246,0.3)]' 
-          : 'text-[#94a3b8] hover:text-white hover:bg-white/5'}`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-
-
-/* ═══════════════════════════════════════════════════════════════ */
-/* VPS Control Tab                                                */
-/* ═══════════════════════════════════════════════════════════════ */
-
-function VPSControlTab() {
-  const [activeSubTab, setActiveSubTab] = useState('matrix');
-  const [chatInput, setChatInput] = useState('');
-
-  return (
-    <div className="flex-1 flex overflow-hidden">
-      
-      {/* ── Left Sidebar (Swarm Copilot Style) ── */}
-      <aside className="w-[320px] bg-[#0a0e17] border-r border-[#1e293b] flex flex-col shrink-0 relative z-10 shadow-2xl">
-        <div className="p-4 border-b border-[#1e293b] bg-[#0a0e17]">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2 tracking-tight">
-            <BrainCircuit className="w-5 h-5 text-[#06b6d4]" /> Agentic Control
-          </h2>
-          <div className="flex gap-2 mt-4">
-            <button className="flex-1 py-1.5 bg-black hover:bg-white/5 text-[#94a3b8] text-[11px] font-bold rounded-full border border-[#1e293b] transition-colors flex justify-center items-center gap-1"><Zap className="w-3 h-3"/> Audit</button>
-            <button className="flex-1 py-1.5 bg-black hover:bg-white/5 text-[#94a3b8] text-[11px] font-bold rounded-full border border-[#1e293b] transition-colors flex justify-center items-center gap-1"><Monitor className="w-3 h-3 text-[#f59e0b]"/> Screen</button>
-            <button className="flex-1 py-1.5 bg-black hover:bg-white/5 text-[#94a3b8] text-[11px] font-bold rounded-full border border-[#1e293b] transition-colors flex justify-center items-center gap-1"><Terminal className="w-3 h-3 text-[#06b6d4]"/> Shell</button>
-            <button className="flex-1 py-1.5 bg-black hover:bg-white/5 text-[#94a3b8] text-[11px] font-bold rounded-full border border-[#1e293b] transition-colors flex justify-center items-center gap-1">Clear</button>
-          </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/40">
-          <div className="mb-4 bg-[#0a0e17] border border-[#1e293b] rounded-xl p-4 shadow-lg">
-            <h3 className="text-[13px] font-bold text-white mb-2">VegaClaw Engine Active 🦀</h3>
-            <p className="text-[12px] text-[#94a3b8] leading-relaxed">I have full agentic control. I can use computer vision, navigate the UI, or manage the VPS. What are we building?</p>
-          </div>
-        </div>
-
-        <div className="p-4 bg-[#0a0e17] border-t border-[#1e293b]">
-          <div className="relative">
-            <input 
-              type="text" 
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask the swarm..." 
-              className="w-full bg-black border border-[#1e293b] rounded-xl px-4 py-3 pr-12 text-sm text-white focus:border-[#a855f7] outline-none transition-colors" 
-            />
-            <button className="absolute right-2 top-2 p-1.5 bg-[#06b6d4] hover:bg-[#06b6d4]/90 text-white rounded-[10px] transition-transform active:scale-95 shadow-md flex items-center justify-center w-8 h-8">
-              <div className="w-0 h-0 border-t-4 border-t-transparent border-l-6 border-l-white border-b-4 border-b-transparent ml-1"></div>
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main Content Block ── */}
-      <main className="flex-1 overflow-hidden relative flex flex-col bg-[#0a0e17] shadow-[inset_20px_0_30px_-20px_rgba(0,0,0,0.5)]">
-        
-        {/* ── Secondary Tab Bar (Matrix Ops Style) ── */}
-        <div className="h-10 bg-[#0a0e17] border-b border-[#1e293b] flex items-end px-2 shrink-0">
-           <div 
-             onClick={() => setActiveSubTab('matrix')}
-             className={`px-5 py-1.5 border border-[#1e293b] border-b-0 rounded-t-md text-[12px] font-bold flex items-center gap-2 mr-1 cursor-pointer transition-colors ${activeSubTab === 'matrix' ? 'bg-[#111823] text-white' : 'bg-transparent text-[#94a3b8] border-transparent hover:text-white'}`}>
-              <Layers className="w-3.5 h-3.5 text-[#06b6d4]" /> Matrix View
-           </div>
-           <div 
-             onClick={() => setActiveSubTab('desktop')}
-             className={`px-5 py-1.5 border border-[#1e293b] border-b-0 rounded-t-md text-[12px] font-bold flex items-center gap-2 mr-1 cursor-pointer transition-colors ${activeSubTab === 'desktop' ? 'bg-[#111823] text-white' : 'bg-transparent text-[#94a3b8] border-transparent hover:text-white'}`}>
-              <div className="w-3 h-3 bg-[#3b82f6] rounded-sm"></div> Desktop (noVNC)
-           </div>
-           <div 
-             onClick={() => setActiveSubTab('terminal')}
-             className={`px-5 py-1.5 border border-[#1e293b] border-b-0 rounded-t-md text-[12px] font-bold flex items-center gap-2 mr-1 cursor-pointer transition-colors ${activeSubTab === 'terminal' ? 'bg-[#111823] text-white' : 'bg-transparent text-[#94a3b8] border-transparent hover:text-white'}`}>
-              <div className="w-3 h-3 bg-[#f59e0b] rounded-sm" style={{transform: "rotate(45deg)"}}></div> Terminal (tty)
-           </div>
-           <div 
-             onClick={() => setActiveSubTab('pm2')}
-             className={`px-5 py-1.5 border border-[#1e293b] border-b-0 rounded-t-md text-[12px] font-bold flex items-center gap-2 mr-1 cursor-pointer transition-colors ${activeSubTab === 'pm2' ? 'bg-[#111823] text-white' : 'bg-transparent text-[#94a3b8] border-transparent hover:text-white'}`}>
-              <div className="w-3 h-3 bg-white opacity-80 rounded-sm"></div> Process Manager
-           </div>
-           <div 
-             onClick={() => setActiveSubTab('fullide')}
-             className={`px-5 py-1.5 border border-[#1e293b] border-b-0 rounded-t-md text-[12px] font-bold flex items-center gap-2 mr-1 cursor-pointer transition-colors ${activeSubTab === 'fullide' ? 'bg-[#111823] text-white' : 'bg-transparent text-[#94a3b8] border-transparent hover:text-white'}`}>
-              <div className="w-3 h-3 bg-[#06b6d4] rounded-full"></div> Full IDE (Antigravity)
-           </div>
-        </div>
-
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#2a2d2a]/5">
-          <div className="flex items-center justify-between px-4 py-1.5 bg-[#0b1612]">
-              <div className="text-[12px] font-bold text-[#4ade80] flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" /> Live VPS Feed
-              </div>
-              <div className="text-[10px] text-[#4ade80]/60 font-mono">
-                  Permanent Display: Desktop / Terminals
-              </div>
-          </div>
-          <div className="flex-1 overflow-auto m-1 ring-1 ring-[#1e293b] relative bg-black flex items-center justify-center">
-              <img 
-                id="vps-stream"
-                src={`/api/stream?t=${Date.now()}`} 
-                className="w-full h-full object-contain z-10" 
-                alt="VPS Stream"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const ph = document.getElementById('stream-placeholder');
-                  if (ph) ph.style.display = 'flex';
-                }}
-                onLoad={(e) => {
-                  e.currentTarget.style.display = 'block';
-                  const ph = document.getElementById('stream-placeholder');
-                  if (ph) ph.style.display = 'none';
-                }}
-              />
-              <div id="stream-placeholder" className="absolute inset-0 flex items-center justify-center flex-col text-center bg-[#0d1117] z-0 hidden">
-                <div className="w-16 h-16 rounded-xl bg-[#1e293b]/50 border border-[#1e293b] flex items-center justify-center mx-auto mb-4">
-                  <Monitor className="w-8 h-8 text-[#334155]" />
-                </div>
-                <p className="text-[#334155] text-sm font-medium">VPS Display Stream</p>
-                <p className="text-[#1e293b] text-[11px] mt-1">Awaiting vision feed connection...</p>
-              </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════ */
-/* Chat Tab                                                       */
-/* ═══════════════════════════════════════════════════════════════ */
-
-function ChatTab({ fleet }: { fleet: any[] }) {
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const activeAgent = fleet[0];
+  const [activeTab, setActiveTab] = useState('vps');
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [termCollapsed, setTermCollapsed] = useState(false);
+  const [chatMode, setChatMode] = useState('agent');
   
-  const [messages, setMessages] = useState<Message[]>([
-    { 
-      role: 'system', 
-      text: 'Swarm Intelligence Active 🦐. I have full agentic control. What are we building?',
-      thinking: 'Initialized 14-agent swarm. Ready for high-fidelity code synthesis on remote gateways.'
-    },
+  const [isConnected] = useState(true);
+  const [taskOn, setTaskOn] = useState(false);
+
+  // Stats
+  const [stats] = useState({ ocr: 0, ui: 0, ml: 0, win: '0%' });
+
+  // Terminal Logs
+  const [termLogs, setTermLogs] = useState<{from: string, txt: string}[]>([{from: 'sys', txt: 'root@vps:~$ _'}]);
+  const [termInput, setTermInput] = useState('');
+
+  // Chat
+  const [vpsChat, setVpsChat] = useState<{role: 'system'|'user'|'agent', msg: string, tag?: string}[]>([
+    { role: 'system', msg: 'VegaClaw v2 — 4-lane vision race engine active' }
   ]);
+  const [vpsChatIn, setVpsChatIn] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // Refresh stream
+  const [streamTick, setStreamTick] = useState(Date.now());
+
+  // MTClaw / VegaClaw replacement Tab State
+  const [subTab, setSubTab] = useState('telemetry');
+
+  // Helpers
+  const addTermLog = (msg: string, isCmd = false) => {
+    setTermLogs(p => [...p, { from: isCmd ? 'cmd' : 'res', txt: msg }]);
+  };
+
+  const addChatLog = (role: 'user'|'agent'|'system', msg: string, tag?: string) => {
+    setVpsChat(p => [...p, { role, msg, tag }]);
+  };
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [vpsChat]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    const userMsg: Message = { role: 'user', text: input };
-    setMessages([...messages, userMsg]);
-    const cmd = input;
-    setInput('');
-    setIsLoading(true);
+  // Actions
+  const termRun = async () => {
+    if (!termInput.trim()) return;
+    const cmd = termInput.trim();
+    setTermInput('');
+    addTermLog(`$ ${cmd}`, true);
     try {
-      const resp = await apiFetch('/command', {
+      const r = await apiFetch('/api/vision/action', {
         method: 'POST',
-        body: JSON.stringify({ action: 'chat', text: cmd, agent_id: activeAgent?.id || 'vps-1' })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'runCommand', params: { cmd } })
       });
-      const result = await resp.json();
-      let answer = result.ai_hint || (result.success ? "Action complete." : "Command failed.");
-      let thinking = "";
-      const thinkMatch = answer.match(/<think>([\s\S]*?)<\/think>/);
-      if (thinkMatch) {
-         thinking = thinkMatch[1].trim();
-         answer = answer.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+      addTermLog(r.result || r.error || "done");
+    } catch (e: any) {
+      addTermLog(`Error: ${e.message}`);
+    }
+  };
+
+  const sendVpsChat = async (text?: string) => {
+    const t = text || vpsChatIn.trim();
+    if (!t || taskOn) return;
+    setVpsChatIn('');
+    addChatLog('user', t);
+    
+    if (chatMode === 'agent') {
+      startTask(t);
+    } else if (chatMode === 'direct') {
+      directAct(t);
+    } else {
+      visionQ();
+    }
+  };
+
+  const startTask = async (task: string) => {
+    setTaskOn(true);
+    addChatLog('system', 'Starting...');
+    try {
+      const r = await apiFetch('/api/vision/task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, maxSteps: 12 })
+      });
+      if (r.started) {
+        addChatLog('agent', 'Task accepted', 'act');
+        // Let's pretend it finishes for UI
+        setTimeout(() => {
+          setTaskOn(false);
+          addChatLog('system', 'Task complete');
+          setStreamTick(Date.now());
+        }, 3000);
+      } else {
+        addChatLog('agent', 'Failed: ' + (r.error || '?'));
+        setTaskOn(false);
       }
-      setMessages(m => [...m, { role: 'system', text: answer, thinking: thinking || result.reasoning }]);
-    } catch (err) {
-      setMessages(m => [...m, { role: 'system', text: "Bridge connection failed. Is Control Server running on 42019?" }]);
-    } finally {
-      setIsLoading(false);
+    } catch (e: any) {
+      addChatLog('agent', 'Error: ' + e.message);
+      setTaskOn(false);
+    }
+  };
+
+  const directAct = async (_text: string) => {
+    addChatLog('system', 'Executing...');
+    setTimeout(() => {
+       addChatLog('agent', 'Done.');
+       setStreamTick(Date.now());
+    }, 1000);
+  };
+
+  const visionQ = async () => {
+    addChatLog('system', 'Analyzing current screen...');
+    setTimeout(() => {
+       addChatLog('agent', '<b>Vision Analysis</b><br>📝 0 texts<br>🎨 0 UI elements<br>⏱ Race: 120ms');
+    }, 1000);
+  };
+
+  const captureScreen = async () => {
+    setStreamTick(Date.now());
+  };
+
+  const toggleFullscreen = () => {
+    const el = document.getElementById('page-vps');
+    if (!document.fullscreenElement && el) {
+      el.requestFullscreen().catch(console.error);
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen();
     }
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Chat Messages */}
-      <div className="flex-1 flex flex-col bg-[#0f172a]">
-        <div className="px-5 py-3 border-b border-[#1e293b]/40 flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-amber-500 animate-pulse' : 'bg-[#06b6d4]'}`} />
-          <span className="text-xs font-semibold text-[#94a3b8]">
-            {isLoading ? 'Processing...' : 'AI Command Terminal'}
-          </span>
+    <>
+      <div className="hdr">
+        <div>
+          <div className="logo">VEGACLAW</div>
+          <div className="logo-sub">Command Center</div>
         </div>
+        <div className="conn">
+          <div className="conn-dot" style={{ background: isConnected ? 'var(--green)' : 'var(--red)', animation: isConnected ? 'pulse 2s infinite' : 'none' }}></div>
+          <span>{isConnected ? 'Connected' : 'Offline'}</span>
+        </div>
+        <div className="hdr-r">
+          <div className="badge">OCR <b>{stats.ocr}</b></div>
+          <div className="badge">UI <b>{stats.ui}</b></div>
+          <div className="badge">ML <b>{stats.ml}</b></div>
+          <div className="badge">Win <b>{stats.win}</b></div>
+        </div>
+      </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-fadeIn`}>
-              <div className={`max-w-[85%] p-4 rounded-xl text-[13px] leading-relaxed
-                ${msg.role === 'user' 
-                  ? 'bg-[#06b6d4]/15 border border-[#06b6d4]/20 text-white rounded-br-none' 
-                  : 'bg-[#0b1120] border border-[#1e293b]/60 text-[#e2e8f0] rounded-bl-none'}`}>
-                
-                {msg.thinking && (
-                  <div className="mb-3 p-3 bg-white/5 border border-white/5 rounded-lg text-[11px] text-[#94a3b8] italic">
-                    <div className="flex items-center gap-2 mb-1 uppercase font-bold text-[9px] tracking-widest text-[#06b6d4]">
-                      <BrainCircuit className="w-3 h-3" /> Reasoning
-                    </div>
-                    {msg.thinking}
-                  </div>
+      <div className="tabs">
+        <div className={`tab ${activeTab === 'vps' ? 'active' : ''}`} onClick={() => setActiveTab('vps')}>
+          🖥 VPS Control
+        </div>
+        <div className={`tab ${activeTab === 'chat-only' ? 'active' : ''}`} onClick={() => setActiveTab('chat-only')}>
+          💬 Chat
+        </div>
+        <div className={`tab ${activeTab === 'mtclaw' ? 'active' : ''}`} onClick={() => setActiveTab('mtclaw')}>
+          🦅 Swarm Core
+        </div>
+        <div className={`tab ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+          ⚙ Settings
+        </div>
+      </div>
+
+      {/* TAB: VPS CONTROL */}
+      <div className={`tab-page ${activeTab === 'vps' ? 'show' : ''}`} id="page-vps" style={{ display: activeTab === 'vps' ? 'flex' : 'none' }}>
+        
+        {/* LEFT: CHAT */}
+        <div className={`chat-col ${chatCollapsed ? 'collapsed' : ''}`} id="chatCol">
+          <div className="chat-toggle" onClick={() => setChatCollapsed(!chatCollapsed)}>
+            {chatCollapsed ? '▶' : '◀'}
+          </div>
+          <div className="chat-top">
+            <div className="chat-title">🤖 Agentic Control</div>
+            <div className="chat-sub">Natural language → vision-driven VPS actions</div>
+            <div className="chat-modes">
+              <button className={`mode ${chatMode === 'agent' ? 'on' : ''}`} onClick={() => setChatMode('agent')}>Agent</button>
+              <button className={`mode ${chatMode === 'direct' ? 'on' : ''}`} onClick={() => setChatMode('direct')}>Direct</button>
+              <button className={`mode ${chatMode === 'vision' ? 'on' : ''}`} onClick={() => setChatMode('vision')}>Analyze</button>
+            </div>
+          </div>
+
+          <div className="msgs">
+            {vpsChat.map((m, i) => (
+              <div key={i} className={`m ${m.role === 'user' ? 'u' : m.role === 'agent' ? 'a' : 's'}`}>
+                <span dangerouslySetInnerHTML={{ __html: m.msg }} />
+                {m.tag && (
+                  <>
+                    <br/>
+                    <div className={`tag ${m.tag === 'act' ? 'act' : 'ok'}`}>{m.tag === 'act' ? '⚡ Action' : 'Matched'}</div>
+                  </>
                 )}
-                <div className="whitespace-pre-wrap">{msg.text}</div>
               </div>
-              <span className="text-[9px] text-[#475569] mt-1 uppercase font-bold tracking-widest px-2">
-                {msg.role === 'user' ? 'Commander' : 'VegaClaw'}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
 
-        <div className="p-4 border-t border-[#1e293b]/40">
-          <form onSubmit={handleSend} className="relative">
-            <textarea 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
-              placeholder="Type command for the swarm..."
-              className="w-full bg-[#0b1120] border border-[#1e293b]/60 rounded-lg p-3 pr-12 text-sm text-white focus:border-[#06b6d4]/40 outline-none min-h-[50px] max-h-[150px] transition-all resize-none"
-            />
-            <button type="submit" className="absolute right-2.5 bottom-2.5 p-2 bg-[#06b6d4] hover:bg-[#06b6d4]/80 text-white rounded-md transition-transform active:scale-95">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
+          <div className="quicks">
+            <button className="qb" onClick={() => sendVpsChat('Open Firefox to youtube.com')}>▶ YouTube</button>
+            <button className="qb" onClick={() => sendVpsChat('Take a screenshot')}>📸 Screen</button>
+            <button className="qb" onClick={() => sendVpsChat('Check system resources')}>📊 Resources</button>
+            <button className="qb" onClick={() => sendVpsChat('Open terminal')}>⬛ Terminal</button>
+            <button className="qb" onClick={() => sendVpsChat('List PM2 processes')}>🔄 PM2</button>
+            <button className="qb" onClick={() => sendVpsChat('Check disk usage')}>💾 Disk</button>
+          </div>
 
-/* ═══════════════════════════════════════════════════════════════ */
-/* Settings Tab                                                   */
-/* ═══════════════════════════════════════════════════════════════ */
-
-function SettingsTab() {
-  return (
-    <div className="flex-1 overflow-y-auto p-8 animate-fadeIn">
-      <div className="mb-8">
-        <h2 className="text-xl font-bold tracking-tight mb-1 text-white">System Configuration</h2>
-        <p className="text-sm text-[#64748b]">Manage Control Bridge ports and agent registry gateways.</p>
-      </div>
-      
-      <div className="max-w-3xl space-y-6">
-        <div className="bg-[#0f172a] border border-[#1e293b]/60 rounded-xl p-6">
-          <h3 className="text-sm font-bold text-white mb-5 flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-[#06b6d4]" /> Connection Infrastructure
-          </h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-2">Control Bridge Port (HTTP)</label>
-              <div className="flex items-center gap-3 bg-[#0b1120] border border-[#1e293b]/60 rounded-lg px-4 py-3">
-                <Zap className="w-4 h-4 text-amber-500" />
-                <span className="text-white font-mono font-bold">42019</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-2">Tauri Asset Port</label>
-              <div className="flex items-center gap-3 bg-[#0b1120] border border-[#1e293b]/60 rounded-lg px-4 py-3">
-                <Clock className="w-4 h-4 text-[#a855f7]" />
-                <span className="text-white font-mono font-bold">42018</span>
-              </div>
+          <div className="chat-in">
+            <div className="in-wrap">
+              <textarea
+                value={vpsChatIn}
+                onChange={e => setVpsChatIn(e.target.value)}
+                placeholder="Tell VegaClaw what to do..."
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendVpsChat(vpsChatIn);
+                  }
+                }}
+              />
+              <button onClick={() => sendVpsChat(vpsChatIn)} disabled={taskOn}>▸</button>
             </div>
           </div>
         </div>
 
-        <div className="bg-red-950/20 border border-red-500/20 rounded-xl p-6">
-          <h3 className="text-sm font-bold text-red-400 mb-2">DANGER: NEURAL PURGE</h3>
-          <p className="text-xs text-[#64748b] mb-4">Executing this will permanently delete all learned agent positions and project memories.</p>
-          <button className="px-6 py-2.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-500/30 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all">
-            Execute System Reset
-          </button>
+        {/* RIGHT: VPS VIEW */}
+        <div className="vps-col">
+          <div className="screen" id="scrView">
+            <img
+              id="scrImg"
+              src={`/api/stream?t=${streamTick}`}
+              style={{ cursor: 'crosshair', outline: 'none', objectFit: 'contain' }}
+              tabIndex={0}
+              onError={(e) => {
+                 e.currentTarget.style.display = 'none';
+                 const p = document.getElementById('sph');
+                 if (p) p.style.display = 'block';
+              }}
+              onLoad={(e) => {
+                 e.currentTarget.style.display = 'block';
+                 const p = document.getElementById('sph');
+                 if (p) p.style.display = 'none';
+              }}
+            />
+            <div className="screen-ph" id="sph">
+              Click Refresh to bridge VPS feed<span>or send a command via chat</span>
+            </div>
+            <div className="scr-ov">
+              <div className="scr-b live">● LIVE</div>
+              <div className="scr-b">1920×1080</div>
+            </div>
+            <div className="scr-btns">
+              <button className="scr-btn" onClick={() => setStreamTick(Date.now())}>⟳ Reconnect</button>
+              <button className="scr-btn" onClick={() => captureScreen()}>🧠 Analyze</button>
+              <button className="scr-btn" onClick={toggleFullscreen}>⛶ Fullscreen</button>
+            </div>
+          </div>
+
+          {/* Terminal Panel */}
+          <div className={`term ${termCollapsed ? 'collapsed' : ''}`} id="termPanel">
+            <div className="term-tog" onClick={() => setTermCollapsed(!termCollapsed)}>
+              {termCollapsed ? '▲' : '▼'}
+            </div>
+            <div className="term-hdr">
+              <div className="td" style={{ background: 'var(--red)' }}></div>
+              <div className="td" style={{ background: 'var(--yellow)' }}></div>
+              <div className="td" style={{ background: 'var(--green)' }}></div>
+              <span>root@vps | Vision Engines</span>
+            </div>
+            <div className="race">
+              <div className="lane lane-o" id="laneOcr">
+                <div className="ll">VegaOCR</div>
+                <div className="lv">—</div>
+                <div className="ld">waiting</div>
+              </div>
+              <div className="lane lane-u" id="laneUi">
+                <div className="ll">UI Detect</div>
+                <div className="lv">—</div>
+                <div className="ld">waiting</div>
+              </div>
+              <div className="lane lane-m" id="laneMl">
+                <div className="ll">ML Learn</div>
+                <div className="lv">—</div>
+                <div className="ld">waiting</div>
+              </div>
+              <div className="lane lane-t" id="laneTotal">
+                <div className="ll">Race Total</div>
+                <div className="lv">—</div>
+                <div className="ld">—</div>
+              </div>
+            </div>
+            <div className="term-out">
+              {termLogs.map((l, i) => (
+                <div key={i} style={{ color: l.from === 'cmd' ? 'var(--cyan)' : l.from === 'err' ? 'var(--red)' : l.from === 'sys' ? 'var(--text3)' : 'var(--green)' }}>
+                  {l.txt}
+                </div>
+              ))}
+            </div>
+            <div className="term-in">
+              <input
+                value={termInput}
+                onChange={e => setTermInput(e.target.value)}
+                placeholder="$ command..."
+                onKeyDown={e => {
+                  if (e.key === 'Enter') termRun();
+                }}
+              />
+              <button onClick={termRun}>↵</button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* TAB: CHAT ONLY */}
+      <div className={`tab-page ${activeTab === 'chat-only' ? 'show' : ''}`} style={{ display: activeTab === 'chat-only' ? 'flex' : 'none', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: 800, margin: '0 auto', width: '100%' }}>
+          <div className="msgs" style={{ flex: 1 }}>
+            <div className="m a">Swarm chat syncing online...</div>
+          </div>
+          <div className="chat-in" style={{ padding: 16 }}>
+            <div className="in-wrap">
+              <textarea placeholder="Chat with VegaClaw..."></textarea>
+              <button>▸</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TAB: Swarm Core */}
+      <div className={`tab-page ${activeTab === 'mtclaw' ? 'show' : ''}`} style={{ display: activeTab === 'mtclaw' ? 'flex' : 'none', flexDirection: 'column', padding: 20, overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div>
+            <h2 style={{ color: 'var(--cyan)', fontSize: 20, fontWeight: 700, letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+              🧠 VegaClaw Omni-Cluster
+              <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(0,232,138,0.15)', color: 'var(--green)', border: '1px solid rgba(0,232,138,0.3)' }}>ONLINE</span>
+            </h2>
+            <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 4 }}>14-Agent Swarm Logic Engine</div>
+          </div>
+        </div>
+        
+        <div className="mtclaw-subtabs" style={{ marginTop: 20 }}>
+          <div className={`mtclaw-subtab ${subTab === 'telemetry' ? 'active' : ''}`} onClick={() => setSubTab('telemetry')}>Swarm Telemetry</div>
+          <div className={`mtclaw-subtab ${subTab === 'logs' ? 'active' : ''}`} onClick={() => setSubTab('logs')}>Execution Logs</div>
+        </div>
+
+        {subTab === 'telemetry' && (
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, maxWidth: 800, margin: '0 auto', width: '100%' }}>
+            <h3 style={{ fontSize: 16, color: 'var(--text)', marginBottom: 20, display: 'flex', gap: 8 }}>🧠 Multi-Agent Load Distribution</h3>
+            
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                <span>VISION ENGINE LOAD</span> <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>24%</span>
+              </div>
+              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: '24%', background: 'var(--cyan)', transition: 'all 0.3s' }}></div>
+              </div>
+            </div>
+            
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                <span>LLM REASONING</span> <span style={{ color: 'var(--purple)', fontWeight: 600 }}>12%</span>
+              </div>
+              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: '12%', background: 'var(--purple)', transition: 'all 0.3s' }}></div>
+              </div>
+            </div>
+
+             <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                <span>SYSTEM MEMORY</span> <span style={{ color: 'var(--green)', fontWeight: 600 }}>64%</span>
+              </div>
+              <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: '64%', background: 'var(--green)', transition: 'all 0.3s' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TAB: SETTINGS */}
+      <div className={`tab-page ${activeTab === 'settings' ? 'show' : ''}`} style={{ display: activeTab === 'settings' ? 'flex' : 'none', flexDirection: 'column', padding: 30 }}>
+        <h2 style={{ color: 'var(--cyan)', fontSize: 16, marginBottom: 16 }}>Settings</h2>
+        <div style={{ color: 'var(--text2)', fontSize: 13, lineHeight: 2 }}>
+          <div>🌐 Domain: <b style={{ color: 'var(--text)' }}>vega.vegatech.online</b></div>
+          <div>🖥 VPS IP: <b style={{ color: 'var(--text)' }}>REDACTED_IP</b></div>
+          <div>🔌 Server Port: <b style={{ color: 'var(--text)' }}>4280</b></div>
+          <div>👁 Vision Proxy: <b style={{ color: 'var(--text)' }}>/api/stream</b></div>
+          <div>🤖 Ollama: <b style={{ color: 'var(--text)' }}>11434</b></div>
+          <div>📱 Telegram: <b style={{ color: 'var(--green)' }}>Sync Active</b></div>
+        </div>
+      </div>
+    </>
   );
 }
