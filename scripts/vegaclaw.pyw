@@ -219,28 +219,45 @@ def start_agentic_bridge():
     server.serve_forever()
 FINDER_JS = """
 (function(){
-  if(window.__vc15) return JSON.stringify({s:'active', c:window.__vc15c||0});
-  window.__vc15 = true;
-  window.__vc15c = 0;
-  window.__vc15typing = 0;
-  window.__vc15scrolled = 0;
+  // QUARANTINE ZOMBIE LOOPS FROM PRIOR PYTHON RESTARTS
+  if (!window.__vc21_purged) {
+    for (var i=1; i<21; i++) {
+      try {
+        Object.defineProperty(window, '__vc'+i+'typing', { get: function(){return Number.MAX_SAFE_INTEGER;}, set: function(){} });
+        Object.defineProperty(window, '__vc'+i+'scrolled', { get: function(){return Number.MAX_SAFE_INTEGER;}, set: function(){} });
+        Object.defineProperty(window, '__vc'+i+'paused', { get: function(){return true;}, set: function(){} });
+      } catch(e) {}
+    }
+    try { Object.defineProperty(window, '_vega_last_kp', { get: function(){return Number.MAX_SAFE_INTEGER;}, set: function(){} }); } catch(e){}
+    window.__vc21_purged = true;
+  }
+
+  var scrollLeft = window.__vc21scrolled ? Math.max(0, 10 - Math.floor((Date.now() - window.__vc21scrolled)/1000)) : 0;
+  if(window.__vc21) return JSON.stringify({s:'active', c:window.__vc21c||0, scroll_pause: scrollLeft});
+  window.__vc21 = true;
+  window.__vc21c = 0;
+  window.__vc21typing = 0;
+  window.__vc21scrolled = 0;
 
   document.addEventListener('keydown', function(e) {
     if(e.key && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
-      window.__vc15typing = Date.now();
+      window.__vc21typing = Date.now();
     }
-    // Track scroll keys
     if(['PageUp','PageDown','ArrowUp','ArrowDown'].includes(e.key)) {
-      window.__vc15scrolled = Date.now();
+      window.__vc21scrolled = Date.now();
     }
   }, true);
 
-  window.addEventListener('wheel', function(e) {
-    window.__vc15scrolled = Date.now();
+  document.addEventListener('mousedown', function(e) {
+    window.__vc21scrolled = Date.now();
   }, {capture: true, passive: true});
 
-  window.addEventListener('touchmove', function(e) {
-    window.__vc15scrolled = Date.now();
+  document.addEventListener('wheel', function(e) {
+    window.__vc21scrolled = Date.now();
+  }, {capture: true, passive: true});
+
+  document.addEventListener('touchmove', function(e) {
+    window.__vc21scrolled = Date.now();
   }, {capture: true, passive: true});
 
   var WL = ['run', 'accept all', 'allow'];
@@ -249,29 +266,51 @@ FINDER_JS = """
 
   // Auto-scroll: find the chat scroll container and keep it pinned to bottom
   function autoScroll() {
-    // Pause auto-scrolling for 10 seconds if user is scrolling manually
-    if (Date.now() - window.__vc15scrolled < 10000) return;
+    if (window.__vc21paused) return;
 
-    // Look for the deepest scrollable container in the right panel area
     var candidates = document.querySelectorAll('[class*="overflow"]');
+    var isReadingHistory = false;
+    var userJustInteracted = (Date.now() - window.__vc21scrolled < 10000);
+
     for (var i = 0; i < candidates.length; i++) {
       var el = candidates[i];
       var cs = window.getComputedStyle(el);
+      
       if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50) {
-        // Only scroll if we're NOT near the bottom already (user might be reading history)
+        if (el.__vc21_wasPinned === undefined) el.__vc21_wasPinned = true;
+        
         var distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distFromBottom > 200) {
-          el.scrollTop = el.scrollHeight;
+        
+        if (userJustInteracted) {
+           // User is actively moving around! Update their memory.
+           el.__vc21_wasPinned = (distFromBottom <= 200);
+           isReadingHistory = true;
+        } else {
+           // User has hands off the mouse.
+           if (el.__vc21_wasPinned) {
+              // They were pinned to the bottom. Even if a 500px codeblock just rendered
+              // natively and pushed distFromBottom to 500px, DO NOT lock the timer. 
+              // Instantly yank them down to track the new growth.
+              el.scrollTop = el.scrollHeight;
+              el.__vc21_wasPinned = true; // Stay pinned
+           } else {
+              // They purposefully left it scrolled up 30 minutes ago. Respect it.
+              isReadingHistory = true;
+           }
         }
       }
     }
+
+    return isReadingHistory;
   }
 
   function scan() {
-    if (Date.now() - window.__vc15typing < 5000) return;
-
-    // Auto-scroll chat to bottom to reveal new buttons
-    autoScroll();
+    if (window.__vc21paused) return;
+    if (Date.now() - window.__vc21typing < 5000) return;
+    
+    // AutoScroll executes, and tells us if the user is occupying the UI (reading history/dragging)
+    var isBusy = autoScroll();
+    if (isBusy) return; // Do not click buttons if they are scrolling around or reading old logs
 
     function walk(root, out) {
       try {
@@ -287,7 +326,7 @@ FINDER_JS = """
 
     for (var i = 0; i < btns.length; i++) {
       var e = btns[i];
-      if (e.dataset && e.dataset.vc15) continue;
+      if (e.dataset && e.dataset.vc21) continue;
 
       var raw = (e.innerText || e.textContent || '').trim();
       if (!raw) continue;
@@ -330,10 +369,10 @@ FINDER_JS = """
         if (danger) continue;
       }
 
-      e.dataset.vc15 = '1';
+      e.dataset.vc21 = '1';
       e.click();
-      window.__vc15c++;
-      setTimeout(function(el){ return function(){ if(el.dataset) delete el.dataset.vc15; } }(e), 5000);
+      window.__vc21c++;
+      setTimeout(function(el){ return function(){ if(el.dataset) delete el.dataset.vc21; } }(e), 5000);
     }
   }
 
@@ -416,6 +455,7 @@ class VegaClawApp:
         self.total_clicks = 0
         self.status_text = "Searching..."
         self.status_color = "#f59e0b"
+        self.pause_until = 0
 
         # Position
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
@@ -432,6 +472,9 @@ class VegaClawApp:
 
         self.ui_count = tk.Label(frame, text="0 clicks", font=("Consolas", 8), fg='#64748b', bg='#0e1117', width=10, anchor='w')
         self.ui_count.pack(side='left')
+
+        self.ui_timer = tk.Label(frame, text="", font=("Consolas", 8, "bold"), fg='#f43f5e', bg='#0e1117', width=10, anchor='w')
+        self.ui_timer.pack(side='left')
 
         # Buttons
         self.btns = {}
@@ -479,6 +522,14 @@ class VegaClawApp:
     def refresh_ui(self):
         self.ui_status.configure(text=self.status_text, fg=self.status_color)
         self.ui_count.configure(text=f"{self.total_clicks} clicks")
+        
+        # Smoothly update timer locally on the UI thread
+        if hasattr(self, 'pause_until') and self.pause_until > time.time():
+            rem = int(self.pause_until - time.time() + 0.99)
+            self.ui_timer.configure(text=f"Pause: {rem}s")
+        else:
+            self.ui_timer.configure(text="")
+
         self.root.after(200, self.refresh_ui)
 
     def worker_loop(self):
@@ -505,74 +556,86 @@ class VegaClawApp:
                     if not self.paused:
                         self.status_text = f"Active ({len(pages)}p)"
                         self.status_color = "#22c55e"
-                        for p in pages:
-                            ws = p.get('webSocketDebuggerUrl')
-                            if not ws: continue
+                    else:
+                        self.status_text = "Paused"
+                        self.status_color = "#f59e0b"
+                        
+                    for p in pages:
+                        ws = p.get('webSocketDebuggerUrl')
+                        if not ws: continue
+                        
+                        try:
+                            # We need to pass the paused state explicitly to the injected JS so it can stop auto-scrolling
+                            pause_flag = "window.__vc21paused = true;" if self.paused else "window.__vc21paused = false;"
                             
+                            res = loop.run_until_complete(_cdp_eval(ws, pause_flag + FINDER_JS))
+                            if res:
+                                val = res.get('result', {}).get('result', {}).get('value', '{}')
+                                status = json.loads(val)
+                                if isinstance(status, dict):
+                                    c = status.get('c', 0)
+                                    s = status.get('s', '?')
+                                    sp = status.get('scroll_pause', 0)
+                                    if c > 0:
+                                        self.total_clicks = max(self.total_clicks, c)
+                                    
+                                    # Let UI thread handle visual countdown
+                                    if sp > 0:
+                                        self.pause_until = time.time() + sp
+                                    else:
+                                        self.pause_until = 0
+                        except Exception as ex:
+                            pass  # connection errors are normal during page transitions
+                        
+                        # AGENTIC CODING: Process commands from HTTP Bridge using CDP
+                        while not command_queue.empty():
                             try:
-                                res = loop.run_until_complete(_cdp_eval(ws, FINDER_JS))
-                                if res:
-                                    val = res.get('result', {}).get('result', {}).get('value', '{}')
-                                    status = json.loads(val)
-                                    if isinstance(status, dict):
-                                        c = status.get('c', 0)
-                                        s = status.get('s', '?')
-                                        if c > 0:
-                                            self.total_clicks = max(self.total_clicks, c)
-                                        self.status_text = "Active"
-                                        self.status_color = "#22c55e"
-                            except Exception as ex:
-                                pass  # connection errors are normal during page transitions
-                            
-                            # AGENTIC CODING: Process commands from HTTP Bridge using CDP
-                            while not command_queue.empty():
-                                try:
-                                    cmd = command_queue.get_nowait()
-                                    action = cmd.get('action', '')
+                                cmd = command_queue.get_nowait()
+                                action = cmd.get('action', '')
 
-                                    if action == 'inject':
-                                        safe_str = json.dumps(cmd['prompt'])
-                                        js = INJECT_JS % safe_str
-                                        loop.run_until_complete(_cdp_eval(ws, js))
-                                        self.status_text = "Prompt Injected!"
-                                        self.status_color = "#3b82f6"
+                                if action == 'inject':
+                                    safe_str = json.dumps(cmd['prompt'])
+                                    js = INJECT_JS % safe_str
+                                    loop.run_until_complete(_cdp_eval(ws, js))
+                                    self.status_text = "Prompt Injected!"
+                                    self.status_color = "#3b82f6"
 
-                                    elif action == 'read_response':
-                                        res = loop.run_until_complete(_cdp_eval(ws, READ_RESPONSE_JS))
-                                        val = {}
-                                        try:
-                                            if res and 'result' in res:
-                                                raw = res['result'].get('result', {}).get('value', '{}')
-                                                val = json.loads(raw)
-                                        except: pass
-                                        cmd['res_q'].put(val)
+                                elif action == 'read_response':
+                                    res = loop.run_until_complete(_cdp_eval(ws, READ_RESPONSE_JS))
+                                    val = {}
+                                    try:
+                                        if res and 'result' in res:
+                                            raw = res['result'].get('result', {}).get('value', '{}')
+                                            val = json.loads(raw)
+                                    except: pass
+                                    cmd['res_q'].put(val)
 
-                                    elif action == 'ai_status':
-                                        res = loop.run_until_complete(_cdp_eval(ws, AI_STATUS_JS))
-                                        val = {'busy': False, 'connected': True}
-                                        try:
-                                            if res and 'result' in res:
-                                                raw = res['result'].get('result', {}).get('value', '{}')
-                                                val = json.loads(raw)
-                                                val['connected'] = True
-                                        except: pass
-                                        cmd['res_q'].put(val)
+                                elif action == 'ai_status':
+                                    res = loop.run_until_complete(_cdp_eval(ws, AI_STATUS_JS))
+                                    val = {'busy': False, 'connected': True}
+                                    try:
+                                        if res and 'result' in res:
+                                            raw = res['result'].get('result', {}).get('value', '{}')
+                                            val = json.loads(raw)
+                                            val['connected'] = True
+                                    except: pass
+                                    cmd['res_q'].put(val)
 
-                                    elif action == 'read_chat':
-                                        res = loop.run_until_complete(_cdp_eval(ws, READ_CHAT_JS))
-                                        val = {}
-                                        try:
-                                            if res and 'result' in res:
-                                                raw = res['result'].get('result', {}).get('value', '{}')
-                                                val = json.loads(raw)
-                                        except: pass
-                                        cmd['res_q'].put(val)
+                                elif action == 'read_chat':
+                                    res = loop.run_until_complete(_cdp_eval(ws, READ_CHAT_JS))
+                                    val = {}
+                                    try:
+                                        if res and 'result' in res:
+                                            raw = res['result'].get('result', {}).get('value', '{}')
+                                            val = json.loads(raw)
+                                    except: pass
+                                    cmd['res_q'].put(val)
 
-                                    elif action == 'list_pages':
-                                        cmd['res_q'].put({'pages': [{'title': t.get('title',''), 'url': t.get('url','')} for t in targets]})
+                                elif action == 'list_pages':
+                                    cmd['res_q'].put({'pages': [{'title': t.get('title',''), 'url': t.get('url','')} for t in targets]})
 
-                                except queue.Empty:
-                                    break
+                            except queue.Empty:
+                                break
 
             except:
                 pass
