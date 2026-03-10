@@ -283,9 +283,9 @@ Invoke-WebRequest -Uri $vncUrl -OutFile $vncMsi -UseBasicParsing 2>&1 | Out-Null
 $vncArgs = '/i', $vncMsi, '/quiet', '/norestart', 'ADDLOCAL=Server',
 'SERVER_REGISTER_AS_SERVICE=1', 'SERVER_ADD_FIREWALL_EXCEPTION=1',
 'SET_USEVNCAUTHENTICATION=1', 'VALUE_OF_USEVNCAUTHENTICATION=1',
-'SET_PASSWORD=1', "VALUE_OF_PASSWORD=$(if($env:VNC_PASSWORD){$env:VNC_PASSWORD}else{'changeme'})",
+'SET_PASSWORD=1', "VALUE_OF_PASSWORD=$($env:VNC_PASSWORD)",
 'SET_USECONTROLAUTHENTICATION=1', 'VALUE_OF_USECONTROLAUTHENTICATION=1',
-'SET_CONTROLPASSWORD=1', "VALUE_OF_CONTROLPASSWORD=$(if($env:VNC_PASSWORD){$env:VNC_PASSWORD}else{'changeme'})"
+'SET_CONTROLPASSWORD=1', "VALUE_OF_CONTROLPASSWORD=$($env:VNC_PASSWORD)"
 Start-Process -FilePath "msiexec.exe" -ArgumentList $vncArgs -Wait -NoNewWindow
 Remove-Item $vncMsi -Force -ErrorAction SilentlyContinue
 

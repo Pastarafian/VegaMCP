@@ -592,6 +592,14 @@
         >
           ⚙️ Settings
         </div>
+        <div
+          class="tab"
+          id="tab-btn-vegaclaw"
+          onclick="switchTab('tab-vegaclaw', this)"
+          style="color: var(--accent-cyan); border: 1px solid rgba(6, 182, 212, 0.3); background: rgba(6, 182, 212, 0.05);"
+        >
+          🧲 VegaClaw
+        </div>
       </div>
       <div class="badge badge--online" id="status-badge">ONLINE</div>
       <div class="time" id="clock"></div>
@@ -1951,7 +1959,7 @@ System ready.</pre
               <input
                 type="text"
                 id="vps-key"
-                placeholder="C:\Users\fakej\.ssh\id_rsa_vegaclaw"
+                placeholder="~/.ssh/id_rsa_vegaclaw"
               />
             </div>
             <div style="margin-bottom: 10px">
@@ -3186,7 +3194,47 @@ Awaiting results...</pre
       </div>
     </div>
 
-    <!-- PANE: SETTINGS -->
+    <!-- PANE: VEGACLAW -->
+    <div class="tab-pane" id="tab-vegaclaw">
+      <div class="dashboard-grid">
+        <div class="card full-width">
+          <div class="card-header">
+            <h3>🧲 VegaClaw Multi-threaded Autoclicker</h3>
+          </div>
+          <div class="card-body">
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              VegaClaw v10 is currently active as an always-on-top hotbar. It uses the Chrome DevTools Protocol (CDP) to autonomously click 'Run', 'Accept', and 'Allow' buttons across your Antigravity instances.
+            </p>
+            <div class="vps-grid">
+              <div class="vps-item">
+                <h4>Automation Status</h4>
+                <div class="status-row">
+                  <div class="status-label">Active Engine</div>
+                  <div class="status-value">VegaClaw v10 (Threaded)</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Detection Mode</div>
+                  <div class="status-value">Shadow DOM Recursive Scan</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Typing Protection</div>
+                  <div class="status-value" style="color: var(--accent-green)">ENABLED (3s Cooldown)</div>
+                </div>
+              </div>
+              <div class="vps-item">
+                <h4>Hotbar Controls</h4>
+                <p>Use the floating "CLAW" pill in the bottom-right of your screen to:</p>
+                <ul style="font-size: 0.8rem; color: var(--text-muted); margin-left: 15px;">
+                  <li><strong>Play:</strong> Resume all automation.</li>
+                  <li><strong>Pause:</strong> Temporarily stop clicking.</li>
+                  <li><strong>Stop:</strong> Kill all active automation scripts.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div
       class="tab-pane flex-pane"
       id="tab-settings"

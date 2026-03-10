@@ -109,3 +109,14 @@ token.json
 
 # Portfolio Website
 vegatech/
+VegaTech/
+claw.vegatech.online/
+vega.vegatech.online/
+
+# Debug / temp test data
+test_*.json
+vegaclaw_head.txt
+vega_custodian_state.json
+test_out.json
+caddyfile_current.txt
+mqclaw_old.html

@@ -37,9 +37,9 @@ import { AdaptiveRouter } from './adaptive-router.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = 'vega_orbital_strike_key_' + os.hostname();
-let ADMIN_HASH = '$2b$10$f2i4i45Om.6RbkjqqEpVkeeyc3HPmBIfd7EjNRF4Lk2SMA0lDXPdaS'; // VegaShift_2026
-let forcePasswordChange = true;
+const JWT_SECRET = process.env.JWT_SECRET || ('vega_' + os.hostname() + '_' + Date.now().toString(36));
+let ADMIN_HASH = process.env.ADMIN_HASH || '';
+let forcePasswordChange = !process.env.ADMIN_HASH;
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -1971,15 +1971,15 @@ function authenticate(req: http.IncomingMessage): boolean {
        res[key] = val;
        return res;
      }, {});
-     const token = cookies['vegatech_auth'] || cookies['mqclaw_auth'];
+     const token = cookies['vegatech_auth'] || cookies['vegaclaw_auth'];
      if (token) {
         // If it's a JWT, verify it
         try {
           jwt.verify(token, JWT_SECRET);
           return true;
         } catch (e) {
-          // Fallback: If it's the MQClaw local token (the hash), compare it
-          // This allows compatibility with MQClaw's simple auth
+          // Fallback: If it's the VegaClaw local token (the hash), compare it
+          // This allows compatibility with VegaClaw's simple auth
           if (token === ADMIN_HASH) return true;
         }
      }
@@ -2132,7 +2132,7 @@ const bridge = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(knowledge));
   }
-  const STATE_FILE = 'C:/Users/fakej/Documents/VegaMCP/vega_custodian_state.json';
+  const STATE_FILE = path.join(os.homedir(), 'Documents', 'VegaMCP', 'vega_custodian_state.json');
   
   const getCustodianState = () => {
       try {

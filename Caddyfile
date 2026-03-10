@@ -1,0 +1,228 @@
+:80 {
+	reverse_proxy localhost:4280
+}
+
+185.249.74.99.nip.io {
+	reverse_proxy localhost:4280
+}
+
+http://vegatech.online, http://www.vegatech.online {
+	reverse_proxy localhost:4280
+	log {
+		output file /var/log/caddy/vegatech.log
+	}
+}
+
+command.vegatech.online {
+	reverse_proxy localhost:4280
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output file /var/log/caddy/command.log
+	}
+}
+
+http://vega.vegatech.online {
+	# noVNC / WebSocket VPS Console
+	handle_path /vnc/* {
+		reverse_proxy localhost:6080
+	}
+	handle /websockify {
+		reverse_proxy localhost:6080
+	}
+
+	# Legacy Stream and API
+	handle /stream {
+		reverse_proxy localhost:4282 {
+			flush_interval -1
+		}
+	}
+	handle /api/stream {
+		reverse_proxy localhost:4280 {
+			flush_interval -1
+		}
+	}
+	
+	handle /bridge/* {
+		reverse_proxy localhost:42019
+	}
+
+	root * /var/www/vegaclaw
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		X-XSS-Protection "1; mode=block"
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/vega.log
+	}
+}
+
+VegaJournal.cc {
+	handle /api/* {
+		reverse_proxy localhost:8001
+	}
+
+	handle {
+		root * /opt/vegascience/site/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Referrer-Policy strict-origin-when-cross-origin
+		X-XSS-Protection "1; mode=block"
+		Permissions-Policy "camera=(), microphone=(), geolocation()"
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/vegascience.log
+	}
+}
+
+streamer.vegatech.online {
+	root * /opt/streamerly/client/dist
+
+	handle /api/extract* {
+		reverse_proxy localhost:3006
+	}
+
+	handle /api/* {
+		reverse_proxy localhost:3005
+	}
+
+	handle /pub/* {
+		reverse_proxy localhost:3005
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/streamerly.log
+	}
+}
+
+server.vegatech.online {
+	reverse_proxy localhost:4280
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output file /var/log/caddy/server.log
+	}
+}
+
+mail.vegajournal.cc {
+	root * /var/www/snappymail
+	php_fastcgi unix//var/run/php/php8.3-fpm.sock
+	file_server
+
+	@data {
+		path /data/*
+	}
+	respond @data 403
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	log {
+		output file /var/log/caddy/snappymail.log
+	}
+}
+
+http://vegaclaw.vegatech.online, http://claw.vegatech.online, http://claw.vegatech {
+	# Auth check: accept either vegaclaw_auth OR vegatech_auth cookie
+	@unauth {
+		not header Cookie *vegaclaw_auth=*
+		not header Cookie *vegatech_auth=*
+		not path / /api/* /ide/* /static/* /vscode/* /stable/* /snapshot /vnc/* /websockify
+	}
+	respond @unauth 401 {
+		body "Unauthorized - Please login at the dashboard root."
+	}
+
+	handle /stream {
+		reverse_proxy localhost:4282 {
+			flush_interval -1
+		}
+	}
+
+	# Code-server IDE - use handle_path to auto-strip /ide prefix
+	handle_path /ide/* {
+		reverse_proxy localhost:8787
+	}
+
+	# Code-server internal assets (CSS/JS/fonts)
+	handle /static/* {
+		reverse_proxy localhost:8787
+	}
+
+	handle /vscode/* {
+		reverse_proxy localhost:8787
+	}
+
+	handle /stable/* {
+		reverse_proxy localhost:8787
+	}
+
+	handle /ollama/* {
+		reverse_proxy localhost:11434
+	}
+
+	# noVNC WebSocket VPS Console (Cloudflare WebSocket-compatible)
+	handle_path /vnc/* {
+		reverse_proxy localhost:6080
+	}
+
+	handle /websockify {
+		reverse_proxy localhost:6080
+	}
+
+	# Default fallback to Command Centre
+	handle {
+		reverse_proxy localhost:8585
+	}
+
+	log {
+		output file /var/log/caddy/vegaclaw.log
+	}
+}
