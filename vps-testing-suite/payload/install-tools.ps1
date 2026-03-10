@@ -300,6 +300,21 @@ Log "   [OK] TightVNC installed and secured to localhost:5900"
 # ═══════════════════════════════════════════════════════════════════════════════
 # FINAL: REFRESH PATH AND SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
+Log ""
+Log ">>> TIER 12 — VegaClaw Agentic Bridge (Port 4242) <<<"
+$fwRule = Get-NetFirewallRule -DisplayName "VegaClaw Agentic Bridge" -ErrorAction SilentlyContinue
+if (!$fwRule) {
+    New-NetFirewallRule -DisplayName "VegaClaw Agentic Bridge" -Direction Inbound -LocalPort 4242 -Protocol TCP -Action Allow | Out-Null
+    Log "   [OK] Windows Firewall opened for Port 4242"
+}
+else {
+    Log "   [OK] Windows Firewall already configured for Port 4242"
+}
+
+# The actual vegaclaw.pyw is transferred by the main Node.js custodian, 
+# but we ensure python dependencies are ready:
+pip install requests websockets 2>&1 | Out-Null
+Log "   [OK] Python CDP dependencies installed"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Log ""
