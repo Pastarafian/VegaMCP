@@ -765,6 +765,7 @@ export default function App() {
                         { name: 'vegaclaw_watchdog.ps1', role: '100% Uptime Guardian', port: 'N/A', status: true },
                         { name: 'agentic_pilot.py', role: 'Autonomous Prompt Orchestrator', port: 'N/A', status: true },
                         { name: 'vegaclaw_forge.py', role: '24/7 Infinite Software Factory', port: 'N/A', status: forgeRunning },
+                        { name: 'vegaclaw_rlm_pipeline.py', role: 'Self-Improving RLM Coding Engine', port: 'N/A', status: true },
                         { name: 'vps_swarm_coding.py', role: 'Parallel Fleet Task Dispatcher', port: 'N/A', status: true },
                         { name: 'install-tools.ps1', role: 'VPS Bootstrap & Provisioning', port: 'N/A', status: true },
                       ].map(c => (
