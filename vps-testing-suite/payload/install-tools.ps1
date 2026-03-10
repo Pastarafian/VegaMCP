@@ -36,7 +36,6 @@ $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
 $cpuCores = if ($cpu.NumberOfLogicalProcessors) { $cpu.NumberOfLogicalProcessors } else { 2 }
 
 $HasGUI = ($ramTotalMB -ge 4096)   # >= 4GB for browser/GUI testing
-$HasMedium = ($ramTotalMB -ge 2048)   # >= 2GB for medium-weight CLI tools
 $HasStorage = ($diskFreeGB -ge 20)     # >= 20GB for large frameworks
 $HasBigDisk = ($diskFreeGB -ge 50)     # >= 50GB for Docker + heavy deps
 $HasHyperV = $null -ne (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -ErrorAction SilentlyContinue | Where-Object State -eq Enabled)
@@ -311,10 +310,16 @@ else {
     Log "   [OK] Windows Firewall already configured for Port 4242"
 }
 
-# The actual vegaclaw.pyw is transferred by the main Node.js custodian, 
-# but we ensure python dependencies are ready:
+# The actual vegaclaw.pyw and watchdog are transferred by the main Node.js custodian, 
+# but we ensure python dependencies are ready and schedule the watchdog
 pip install requests websockets 2>&1 | Out-Null
 Log "   [OK] Python CDP dependencies installed"
+
+# Register the 100% Uptime Watchdog as a background Scheduled Task
+$watchdogPath = "C:\Users\fakej\Documents\VegaMCP\scripts\vegaclaw_watchdog.ps1"
+$taskCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$watchdogPath`""
+schtasks.exe /create /tn "VegaClawUptimeWatchdog" /tr $taskCmd /sc onlogon /rl highest /f | Out-Null
+Log "   [OK] 100% Uptime Watchdog Scheduled Task configured via schtasks"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Log ""
