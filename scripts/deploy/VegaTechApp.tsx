@@ -27,7 +27,6 @@ import {
   Flame,
   BarChart3,
   Globe,
-  Server,
   CheckCircle,
   XCircle,
   AlertTriangle,
@@ -386,7 +385,7 @@ export default function App() {
                       { l: 'Bridge Status', v: health.connected ? 'Online' : 'Offline', c: health.connected ? 'from-emerald-500/20 to-emerald-500/5' : 'from-red-500/20 to-red-500/5', ic: health.connected ? 'text-emerald-400' : 'text-red-400', Icon: health.connected ? Wifi : WifiOff },
                       { l: 'Active Pages', v: String(pages.length), c: 'from-cyan-500/20 to-cyan-500/5', ic: 'text-cyan-400', Icon: Globe },
                       { l: 'AI Status', v: aiStatus.busy ? 'Working' : aiStatus.connected ? 'Idle' : 'Disconnected', c: aiStatus.busy ? 'from-amber-500/20 to-amber-500/5' : 'from-purple-500/20 to-purple-500/5', ic: aiStatus.busy ? 'text-amber-400' : 'text-purple-400', Icon: Bot },
-                      { l: 'FORGE', v: forgeRunning ? `Epoch ${forgeEpoch}` : 'Inactive', c: forgeRunning ? 'from-orange-500/20 to-orange-500/5' : 'from-indigo-500/20 to-indigo-500/5', ic: forgeRunning ? 'text-orange-400' : 'text-indigo-400', Icon: Flame },
+                      { l: 'FORGE', v: forgeRunning ? `PID ${forgePid}` : 'Inactive', c: forgeRunning ? 'from-orange-500/20 to-orange-500/5' : 'from-indigo-500/20 to-indigo-500/5', ic: forgeRunning ? 'text-orange-400' : 'text-indigo-400', Icon: Flame },
                     ].map(st => (
                       <div key={st.l} className={`p-5 rounded-2xl bg-gradient-to-br ${st.c} border border-white/5 backdrop-blur-md relative overflow-hidden group`}>
                         <div className="relative z-10 flex flex-col gap-1">
