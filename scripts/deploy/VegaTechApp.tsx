@@ -189,37 +189,68 @@ export default function App() {
     }
   };
 
-  // ─── FORGE State ─────────────────────────────────────────────
+  // ─── RLM Pipeline State (REAL — talks to bridge backend) ─────
   const [forgeRunning, setForgeRunning] = useState(false);
-  const [forgeEpoch, setForgeEpoch] = useState(0);
-  const [forgeNodes, setForgeNodes] = useState('');
+  const [forgeGoal, setForgeGoal] = useState('Create beautiful websites that generate ad revenue');
+  const [forgeModel, setForgeModel] = useState('llama3');
+  const [forgePid, setForgePid] = useState<number | null>(null);
   const [forgeLog, setForgeLog] = useState<string[]>([]);
+  const forgeLogRef = useRef<HTMLDivElement>(null);
 
-  const startForge = () => {
-    if (!forgeNodes.trim()) return;
-    setForgeRunning(true);
-    setForgeEpoch(1);
-    setForgeLog(prev => [...prev, `[${ts()}] 🚀 FORGE Pipeline activated across nodes: ${forgeNodes}`]);
-    addLog('success', 'FORGE', `Autonomous pipeline started on ${forgeNodes}`);
+  // Poll RLM status + log every 2s when tab is active
+  useEffect(() => {
+    let alive = true;
+    const pollRlm = async () => {
+      while (alive) {
+        try {
+          const s = await bridgeGet('/api/rlm/status');
+          if (s.data) {
+            setForgeRunning(s.data.running);
+            setForgePid(s.data.pid);
+          }
+          if (s.data?.running || forgeLog.length > 0) {
+            const l = await bridgeGet('/api/rlm/log');
+            if (l.data?.lines) setForgeLog(l.data.lines);
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    };
+    pollRlm();
+    return () => { alive = false; };
+  }, []);
 
-    // Simulate epoch progression for the UI
-    const interval = setInterval(() => {
-      setForgeEpoch(prev => {
-        const next = prev + 1;
-        setForgeLog(p => [...p, `[${ts()}] 🧬 Epoch ${next}: Distributing ideation prompts to swarm...`]);
-        return next;
-      });
-    }, 30000);
+  // Auto-scroll forge log
+  useEffect(() => {
+    forgeLogRef.current?.scrollTo({ top: forgeLogRef.current.scrollHeight, behavior: 'smooth' });
+  }, [forgeLog]);
 
-    // Store cleanup
-    (window as any).__forgeInterval = interval;
+  const startForge = async () => {
+    if (!forgeGoal.trim()) return;
+    try {
+      const res = await bridgePost('/api/rlm/start', { goal: forgeGoal, model: forgeModel });
+      if (res.data?.ok) {
+        setForgeRunning(true);
+        addLog('success', 'RLM', `Pipeline ignited: ${forgeGoal}`);
+      } else {
+        addLog('warning', 'RLM', res.data?.message || 'Could not start');
+      }
+    } catch {
+      addLog('error', 'RLM', `Bridge unreachable at ${BRIDGE_URL}`);
+    }
   };
 
-  const stopForge = () => {
-    setForgeRunning(false);
-    setForgeLog(prev => [...prev, `[${ts()}] ⛔ FORGE Pipeline halted by operator.`]);
-    addLog('warning', 'FORGE', 'Pipeline stopped');
-    if ((window as any).__forgeInterval) clearInterval((window as any).__forgeInterval);
+  const stopForge = async () => {
+    try {
+      const res = await bridgePost('/api/rlm/stop', {});
+      if (res.data?.ok) {
+        setForgeRunning(false);
+        setForgePid(null);
+        addLog('warning', 'RLM', 'Pipeline halted by operator');
+      }
+    } catch {
+      addLog('error', 'RLM', 'Failed to stop pipeline');
+    }
   };
 
   // ─── TABS CONFIG ─────────────────────────────────────────────
@@ -636,7 +667,7 @@ export default function App() {
                         <Pause size={16} /> Halt Pipeline
                       </button>
                     ) : (
-                      <button onClick={startForge} disabled={!forgeNodes.trim()} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30 transition-all text-xs font-bold uppercase tracking-widest disabled:opacity-50">
+                      <button onClick={startForge} disabled={!forgeGoal.trim()} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30 transition-all text-xs font-bold uppercase tracking-widest disabled:opacity-50">
                         <Rocket size={16} /> Ignite FORGE
                       </button>
                     )}
@@ -651,32 +682,43 @@ export default function App() {
                       </p>
                     </div>
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-500/15 to-transparent border border-amber-500/20">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Epoch</span>
-                      <p className="text-2xl font-black text-amber-400 mt-1">{forgeEpoch}</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Process PID</span>
+                      <p className="text-2xl font-black text-amber-400 mt-1">{forgePid ?? '—'}</p>
                     </div>
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-500/15 to-transparent border border-yellow-500/20">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target Nodes</span>
-                      <p className="text-2xl font-black text-yellow-400 mt-1">{forgeNodes ? forgeNodes.split(',').filter(Boolean).length : 0}</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Model Engine</span>
+                      <p className="text-2xl font-black text-yellow-400 mt-1">{forgeModel}</p>
                     </div>
                   </div>
 
-                  {/* Node Configuration */}
+                  {/* Goal + Model Configuration */}
                   <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5">
                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                      <Server size={16} className="text-orange-400" /> VPS Node Configuration
+                      <Sparkles size={16} className="text-orange-400" /> Mission Goal
                     </h3>
                     <div className="flex gap-4">
                       <input
                         type="text"
-                        value={forgeNodes}
-                        onChange={e => setForgeNodes(e.target.value)}
-                        placeholder="Enter VPS IPs (comma-separated, e.g. 10.0.0.1,10.0.0.2)"
+                        value={forgeGoal}
+                        onChange={(e: any) => setForgeGoal(e.target.value)}
+                        placeholder="e.g. Create websites that make money with ad revenue"
                         disabled={forgeRunning}
-                        className="flex-1 bg-black/40 border border-orange-500/20 rounded-xl p-4 text-sm text-white placeholder-slate-600 focus:border-orange-400 focus:ring-1 focus:ring-orange-400/50 outline-none transition-all font-mono disabled:opacity-50"
+                        className="flex-1 bg-black/40 border border-orange-500/20 rounded-xl p-4 text-sm text-white placeholder-slate-600 focus:border-orange-400 focus:ring-1 focus:ring-orange-400/50 outline-none transition-all disabled:opacity-50"
                       />
+                      <select
+                        value={forgeModel}
+                        onChange={(e: any) => setForgeModel(e.target.value)}
+                        disabled={forgeRunning}
+                        className="bg-black/40 border border-orange-500/20 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-400 outline-none transition-all disabled:opacity-50"
+                      >
+                        <option value="llama3">Llama 3</option>
+                        <option value="codellama">CodeLlama</option>
+                        <option value="mistral">Mistral</option>
+                        <option value="deepseek-coder">DeepSeek Coder</option>
+                      </select>
                     </div>
                     <p className="text-[10px] text-slate-500 mt-3">
-                      Each node must have <code className="text-orange-400">vegaclaw.pyw</code> running with port 4242 accessible. Use the Uptime Watchdog for 100% availability.
+                      Set a high-level objective, then click <strong className="text-orange-400">Ignite FORGE</strong>. The pipeline will autonomously ideate → plan → code → evaluate → learn 24/7.
                     </p>
                   </div>
 
@@ -710,7 +752,7 @@ export default function App() {
                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                       <Terminal size={16} className="text-orange-400" /> FORGE Live Output
                     </h3>
-                    <div className="bg-black/60 rounded-xl p-4 h-48 overflow-y-auto font-mono text-xs custom-scrollbar border border-white/5">
+                    <div ref={forgeLogRef} className="bg-black/60 rounded-xl p-4 h-48 overflow-y-auto font-mono text-xs custom-scrollbar border border-white/5">
                       {forgeLog.length === 0 ? (
                         <span className="text-slate-600">Pipeline output will appear here when FORGE is ignited...</span>
                       ) : (

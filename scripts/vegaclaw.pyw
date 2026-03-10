@@ -14,6 +14,8 @@ import threading
 import time
 import queue
 import os
+import subprocess
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = 9222
@@ -124,6 +126,93 @@ READ_CHAT_JS = """
 })()
 """
 
+# ═══════════════════════════════════════════════════════════════
+# RLM PIPELINE PROCESS MANAGER
+# ═══════════════════════════════════════════════════════════════
+_rlm_process = None
+_rlm_goal = ""
+_rlm_model = "llama3"
+_rlm_log = []  # Last 200 lines of stdout
+_rlm_lock = threading.Lock()
+
+def _rlm_reader_thread(proc):
+    """Background thread that reads the RLM subprocess stdout."""
+    global _rlm_log
+    try:
+        for line in iter(proc.stdout.readline, ''):
+            if line:
+                with _rlm_lock:
+                    _rlm_log.append(line.rstrip())
+                    _rlm_log = _rlm_log[-200:]  # Keep last 200 lines
+    except:
+        pass
+
+def rlm_start(goal, model="llama3", ollama_url="http://localhost:11434"):
+    """Launch the RLM pipeline as a real subprocess."""
+    global _rlm_process, _rlm_goal, _rlm_model, _rlm_log
+    if _rlm_process and _rlm_process.poll() is None:
+        return False, "Pipeline already running"
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    rlm_script = os.path.join(script_dir, 'vegaclaw_rlm_pipeline.py')
+    if not os.path.exists(rlm_script):
+        return False, f"RLM script not found: {rlm_script}"
+
+    _rlm_goal = goal
+    _rlm_model = model
+    _rlm_log = [f"[STARTUP] Launching RLM pipeline with goal: {goal}"]
+
+    python_exe = sys.executable or 'python'
+    cmd = [
+        python_exe, rlm_script,
+        '--goal', goal,
+        '--model', model,
+        '--ollama', ollama_url,
+        '--bridge', f'127.0.0.1:4242',
+    ]
+
+    _rlm_process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+        cwd=script_dir,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+
+    # Spin up log reader thread
+    reader = threading.Thread(target=_rlm_reader_thread, args=(_rlm_process,), daemon=True)
+    reader.start()
+
+    return True, f"Pipeline started (PID {_rlm_process.pid})"
+
+def rlm_stop():
+    """Kill the running RLM pipeline."""
+    global _rlm_process
+    if _rlm_process and _rlm_process.poll() is None:
+        _rlm_process.terminate()
+        try:
+            _rlm_process.wait(timeout=5)
+        except:
+            _rlm_process.kill()
+        with _rlm_lock:
+            _rlm_log.append("[STOPPED] Pipeline terminated by operator.")
+        pid = _rlm_process.pid
+        _rlm_process = None
+        return True, f"Pipeline stopped (PID {pid})"
+    return False, "Pipeline is not running"
+
+def rlm_status():
+    """Get current RLM pipeline status."""
+    running = _rlm_process is not None and _rlm_process.poll() is None
+    return {
+        'running': running,
+        'goal': _rlm_goal,
+        'model': _rlm_model,
+        'pid': _rlm_process.pid if running else None,
+        'log_lines': len(_rlm_log),
+    }
+
+
 def start_agentic_bridge():
     """HTTP bridge for agentic coding — accepts commands, routes to CDP."""
     class AgenticBridgeHandler(BaseHTTPRequestHandler):
@@ -166,6 +255,20 @@ def start_agentic_bridge():
                     for step in steps:
                         command_queue.put({'action': 'inject', 'prompt': step})
                     self._json_response(200, {'status': 'queued', 'steps': len(steps)})
+
+                elif self.path == '/api/rlm/start':
+                    goal = data.get('goal', '')
+                    model = data.get('model', 'llama3')
+                    ollama = data.get('ollama_url', 'http://localhost:11434')
+                    if not goal:
+                        self._json_response(400, {'error': 'No goal provided'})
+                        return
+                    ok, msg = rlm_start(goal, model, ollama)
+                    self._json_response(200 if ok else 409, {'ok': ok, 'message': msg})
+
+                elif self.path == '/api/rlm/stop':
+                    ok, msg = rlm_stop()
+                    self._json_response(200, {'ok': ok, 'message': msg})
 
                 else:
                     self._json_response(404, {'error': 'Unknown endpoint'})
@@ -211,6 +314,13 @@ def start_agentic_bridge():
 
             elif self.path == '/api/health':
                 self._json_response(200, {'status': 'ok', 'service': 'vegaclaw-agentic-bridge'})
+
+            elif self.path == '/api/rlm/status':
+                self._json_response(200, rlm_status())
+
+            elif self.path == '/api/rlm/log':
+                with _rlm_lock:
+                    self._json_response(200, {'lines': _rlm_log[-100:]})
 
             else:
                 self._json_response(404, {'error': 'Unknown endpoint'})
