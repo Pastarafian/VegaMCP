@@ -802,7 +802,7 @@ export default function App() {
                     <h3 className="text-sm font-bold text-white mb-4">Fleet Component Map</h3>
                     <div className="space-y-3">
                       {[
-                        { name: 'vegaclaw.pyw', role: 'CDP Autoclicker + HTTP Bridge', port: '4242', status: health.connected },
+                        { name: 'ide-autoclicker.py', role: 'CDP Autoclicker + HTTP Bridge', port: '4242', status: health.connected },
                         { name: 'vegaclaw_watchdog.ps1', role: '100% Uptime Guardian', port: 'N/A', status: true },
                         { name: 'agentic_pilot.py', role: 'Autonomous Prompt Orchestrator', port: 'N/A', status: true },
                         { name: 'vegaclaw_forge.py', role: '24/7 Infinite Software Factory', port: 'N/A', status: forgeRunning },

@@ -26,14 +26,14 @@
 
 ### 🛡️ Security & Integrity
 - **Deleted Message Immutability**: All chat deletion endpoints have been disabled. A strict soft-delete/archive system (`archived` boolean) is enforced for data integrity and comprehensive audit trails.
-- **XdoTool Hardening**: `ide_autoclicker` strictly sandboxes keypress emulation via a definitive whitelist, neutralizing complex command injection attempts.
+- **XdoTool Hardening & Pivot**: `ide-autoclicker.py` has fully replaced the previous generic MCP tool, shifting to a robust Python-based CDP interface with a persistent overlay UI. Emulation is sandboxed via a definitive whitelist.
 - **Provenance Warnings**: `web_search` now aggressively injects `UNVERIFIED_EXTERNAL_DATA` provenance tags onto scraped output to halt implicit prompt injections (IPI) originating from compromised websites.
 
 ### 🛠 Omni-Cluster Tool Restructuring
 The tool ecosystem is now 78 custom MCP sub-tools deep, categorized into 6 zero-leak Omni-Clusters:
 1. `omni_assistant` (15 tools) — Core reasoning, web search, memory graph, semantic memory, context, sequential thinking.
 2. `omni_swarm` (9 tools) — Swarm ops, A2A protocols, sampling, multimodal.
-3. `omni_automation` (17 tools) — Claw Command Center, VPS, Telegram, webhook, sandbox, file I/O, auto-clicker.
+3. `omni_automation` (16 tools) — Claw Command Center, VPS, Telegram, webhook, sandbox, file I/O.
 4. `omni_systems` (13 tools) — Postgres client, vault, SQLite, gateway, tool search.
 5. `omni_research` (11 tools) — LLM evaluation, quality gates, RAG, agentic loops.
 6. `omni_testing` (13 tools) — Server testing, security pen-testing, hypothesis generators.
