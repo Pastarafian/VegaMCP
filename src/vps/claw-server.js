@@ -1260,7 +1260,7 @@ function chatOllamaRaw(prompt) {
 // ═══════════════════════════════════════════════════════════════
 // Multi-Provider AI Chat (Ollama → DeepSeek fallback)
 // ═══════════════════════════════════════════════════════════════
-const DEEPSEEK_KEY = 'sk-9548e74042624531b949e6057f763dae';
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || '';
 
 function getKnowledgeContext(userText) {
   // Pull relevant knowledge from DB based on user's message

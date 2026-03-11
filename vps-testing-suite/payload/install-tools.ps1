@@ -316,7 +316,7 @@ pip install requests websockets 2>&1 | Out-Null
 Log "   [OK] Python CDP dependencies installed"
 
 # Register the 100% Uptime Watchdog as a background Scheduled Task
-$watchdogPath = "C:\Users\fakej\Documents\VegaMCP\scripts\vegaclaw_watchdog.ps1"
+$watchdogPath = Join-Path $env:USERPROFILE "Documents\VegaMCP\scripts\vegaclaw_watchdog.ps1"
 $taskCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$watchdogPath`""
 schtasks.exe /create /tn "VegaClawUptimeWatchdog" /tr $taskCmd /sc onlogon /rl highest /f | Out-Null
 Log "   [OK] 100% Uptime Watchdog Scheduled Task configured via schtasks"

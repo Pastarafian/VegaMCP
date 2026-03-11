@@ -9,6 +9,8 @@ data/
 
 # Environment secrets — NEVER commit
 .env
+.env.*
+.env.credentials.bak
 
 # OS files
 Thumbs.db
@@ -120,3 +122,12 @@ vega_custodian_state.json
 test_out.json
 caddyfile_current.txt
 mqclaw_old.html
+
+# Autoclicker diagnostic outputs
+scripts/*_scan.txt
+scripts/*_deep.txt
+scripts/*_tags.txt
+scripts/*_diag.txt
+scripts/*_buttons.txt
+scripts/live_*.txt
+scripts/v14_backup.py

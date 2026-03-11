@@ -1,4 +1,4 @@
-/**
+ons
  * VegaClaw IDE AutoClicker — MCP Tool
  * 
  * Manages the PowerShell-based IDE autoclicker that automatically

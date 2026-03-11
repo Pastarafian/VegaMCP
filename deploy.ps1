@@ -35,7 +35,7 @@ Write-Host "[2/3] Uploading to $VPS..." -ForegroundColor Yellow
 Write-Host "  (You will be prompted for your SSH passphrase)" -ForegroundColor DarkGray
 
 # Clear remote dir and upload fresh
-ssh "${VPS_USER}@${VPS}" "rm -rf ${REMOTE_DIR}/* && mkdir -p ${REMOTE_DIR}/assets"
+ssh "${VPS_USER}@${VPS}" "rm -rf ${REMOTE_DIR}/* ; mkdir -p ${REMOTE_DIR}/assets"
 scp "$LOCAL_DIST\index.html" "${VPS_USER}@${VPS}:${REMOTE_DIR}/"
 scp "$LOCAL_DIST\vite.svg" "${VPS_USER}@${VPS}:${REMOTE_DIR}/"
 scp "$LOCAL_DIST\assets\*" "${VPS_USER}@${VPS}:${REMOTE_DIR}/assets/"
