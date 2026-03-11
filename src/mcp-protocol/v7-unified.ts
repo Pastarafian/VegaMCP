@@ -29,12 +29,12 @@ export function getV7Tools() {
     },
     {
       name: "omni_automation",
-      description: "Action & control: browser, workflow, filesystem, shell, git, MCP tasks, API requests, sandbox, watchers, webhooks, schedule, notify, the_claw, claw_command_center, ide_autoclicker, vps_control, image_generation.",
+      description: "Action & control: browser, workflow, filesystem, shell, git, MCP tasks, API requests, sandbox, watchers, webhooks, schedule, notify, the_claw, claw_command_center, vps_control, image_generation.",
       tools: [
         'browser', 'workflow_execute', 'REDACTED_filesystem', 'REDACTED_git', 'REDACTED_shell', 
         'mcp_tasks', 'api_request', 'sandbox_testing', 'watcher', 'webhook', 
         'schedule_task', 'notify', 'the_claw', 'claw_command_center', 
-        'ide_autoclicker', 'vps_control', 'image_generation'
+        'vps_control', 'image_generation'
       ]
     },
     {

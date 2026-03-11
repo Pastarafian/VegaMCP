@@ -121,7 +121,10 @@ FINDER_JS = r"""
 (function(){
   // ─── HEARTBEAT ───
   if(window.__vc && (Date.now() - window.__vchb < 10000)) {
-    return JSON.stringify({s:'active', c:window.__vcc||0, m:window.__vcm||'', inv:window.__vcTargets?window.__vcTargets.length:0, ml:window.__vcMLStats||{}});
+    var typLeft = window.__vctyping ? Math.max(0, 5000 - (Date.now() - window.__vctyping)) : 0;
+    var scrLeft = window.__vcscrolling ? Math.max(0, 15000 - (Date.now() - window.__vcscrolling)) : 0;
+    var cd = Math.max(typLeft, scrLeft);
+    return JSON.stringify({s:'active', c:window.__vcc||0, m:window.__vcm||'', inv:window.__vcTargets?window.__vcTargets.length:0, ml:window.__vcMLStats||{}, cd:cd});
   }
 
   // ─── CLEANUP ───
@@ -598,7 +601,7 @@ FINDER_JS = r"""
   window.__vcInt = setInterval(clickTargets, 500);
   setTimeout(clickTargets, 200);
 
-  return JSON.stringify({s:'injected', c:0, m:'v16 deep scanner injected'});
+  return JSON.stringify({s:'injected', c:0, m:'v16 deep scanner injected', cd:0});
 })()
 """
 
@@ -644,6 +647,7 @@ class VegaClickApp:
         self.paused = False
         self.stopped = False
         self.total_clicks = 0
+        self.cooldown = 0
         self.status_text = "Searching..."
         self.status_color = "#f59e0b"
         self.last_msg = ""
@@ -651,35 +655,34 @@ class VegaClickApp:
         self.scan_targets = 0
 
         sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        self.root.geometry(f"380x30+{sw - 400}+{sh - 70}")
+        self.root.geometry(f"480x30+{sw - 500}+{sh - 70}")
 
         frame = tk.Frame(self.root, bg='#0e1117')
-        frame.pack(fill='both', expand=True)
+        frame.place(x=8, rely=0.5, anchor='w')
 
-        col = 0
-        tk.Label(frame, text="⚡VC", font=("Segoe UI", 8, "bold"), fg='#00d4ff', bg='#0e1117').grid(row=0, column=col, padx=(4,0)); col+=1
-        tk.Label(frame, text="16", font=("Consolas", 7), fg='#a78bfa', bg='#1c2128', padx=2).grid(row=0, column=col, padx=(2,4)); col+=1
+        tk.Label(frame, text="VegaClick", font=("Segoe UI", 9, "bold"), fg='#00d4ff', bg='#0e1117').pack(side='left', padx=(0,4))
+        tk.Label(frame, text="16", font=("Consolas", 8, "bold"), fg='#a78bfa', bg='#1c2128').pack(side='left', padx=(0,8), ipady=1, ipadx=2)
 
-        self.ui_status = tk.Label(frame, text="...", font=("Consolas", 8), fg=self.status_color, bg='#0e1117')
-        self.ui_status.grid(row=0, column=col, padx=(0,2)); col+=1
+        self.ui_status = tk.Label(frame, text="...", font=("Consolas", 9), fg=self.status_color, bg='#0e1117', width=16, anchor='w')
+        self.ui_status.pack(side='left', padx=(0,8))
 
-        self.ui_count = tk.Label(frame, text="0✓", font=("Consolas", 8), fg='#64748b', bg='#0e1117')
-        self.ui_count.grid(row=0, column=col, padx=(0,4)); col+=1
+        self.ui_count = tk.Label(frame, text="0 clicks", font=("Consolas", 9), fg='#64748b', bg='#0e1117', width=11, anchor='w')
+        self.ui_count.pack(side='left', padx=(0,12))
 
         self.btns = {}
         for name, txt, clr in [('play','▶','#22c55e'), ('pause','⏸','#f59e0b'), ('stop','■','#ef4444')]:
-            b = tk.Label(frame, text=txt, font=("Segoe UI", 8, "bold"), bg='#1c2128', fg=clr, padx=4, cursor='hand2')
-            b.grid(row=0, column=col, padx=1); col+=1
+            b = tk.Label(frame, text=txt, font=("Segoe UI", 8), bg='#1c2128', fg=clr, width=3)
+            b.pack(side='left', padx=2, pady=4)
             b.bind('<Button-1>', lambda e, n=name: self.set_state(n))
             self.btns[name] = b
 
         self.overlay_on = True
-        self.overlay_btn = tk.Label(frame, text="◎", font=("Segoe UI", 8, "bold"), bg='#2d333b', fg='#a78bfa', padx=4, cursor='hand2')
-        self.overlay_btn.grid(row=0, column=col, padx=1); col+=1
+        self.overlay_btn = tk.Label(frame, text="◎", font=("Segoe UI", 8), bg='#2d333b', fg='#a78bfa', width=3)
+        self.overlay_btn.pack(side='left', padx=2, pady=4)
         self.overlay_btn.bind('<Button-1>', lambda e: self.toggle_overlay())
 
-        close_btn = tk.Label(frame, text="✕", font=("Segoe UI", 8, "bold"), bg='#1c2128', fg='#64748b', padx=4, cursor='hand2')
-        close_btn.grid(row=0, column=col, padx=1)
+        close_btn = tk.Label(frame, text="✕", font=("Segoe UI", 8), bg='#1c2128', fg='#64748b', width=3)
+        close_btn.pack(side='left', padx=2, pady=4)
         close_btn.bind('<Button-1>', lambda e: self.root.destroy())
 
         self.root.bind('<Button-1>', self._start_drag)
@@ -708,7 +711,10 @@ class VegaClickApp:
         elif self.paused: st, sc = "Paused", "#f59e0b"
         else: st, sc = self.status_text, self.status_color
         self.ui_status.configure(text=st, fg=sc)
-        self.ui_count.configure(text=f"{self.total_clicks}✓")
+        if hasattr(self, 'cooldown') and self.cooldown > 0 and not self.stopped and not self.paused:
+            self.ui_count.configure(text=f"{self.cooldown/1000.0:.1f}s wait", fg="#f59e0b")
+        else:
+            self.ui_count.configure(text=f"{self.total_clicks} clicks", fg="#64748b")
         self.root.after(200, self.refresh_ui)
 
     def worker_loop(self):
@@ -736,6 +742,7 @@ class VegaClickApp:
                         self.status_color = "#f59e0b"
                 else:
                     if not self.paused:
+                        max_cd = 0
                         for p in pages:
                             ws = p.get('webSocketDebuggerUrl')
                             if not ws: continue
@@ -755,6 +762,8 @@ class VegaClickApp:
                                         c = status.get('c', 0)
                                         m = status.get('m', '')
                                         inv = status.get('inv', 0)
+                                        cd = status.get('cd', 0)
+                                        max_cd = max(max_cd, cd)
                                         if c > 0: self.total_clicks = max(self.total_clicks, c)
                                         if m and m != self.last_msg:
                                             self.last_msg = m
@@ -775,6 +784,7 @@ class VegaClickApp:
                                         val = res.get('result',{}).get('result',{}).get('value','') if res else ''
                                         cmd['res_q'].put(val)
                                 except queue.Empty: break
+                        self.cooldown = max_cd
             except: pass
             time.sleep(POLL_INTERVAL)
 

@@ -138,8 +138,7 @@ import { theClawSchema, handleTheClaw } from './tools/capabilities/the-claw.js';
 // --- VegaClaw: Command Center API Bridge ---
 import { clawBridgeSchema, handleClawBridge } from './tools/capabilities/claw-bridge.js';
 
-// --- VegaClaw: IDE AutoClicker ---
-import { ideAutoClickerSchema, handleIDEAutoClicker } from './tools/capabilities/ide-autoclicker.js';
+// --- VegaClaw: IDE AutoClicker (removed) ---
 
 // --- VegaClaw: Direct VPS Control ---
 import { vpsControlSchema, handleVPSControl } from './tools/capabilities/vps-control.js';
@@ -329,7 +328,6 @@ const TOOL_ANNOTATIONS: Record<string, {
   mcp_relay: { title: 'MCP-to-MCP Agent Relay', readOnlyHint: false },
   the_claw: { title: 'VegaClaw Multi-Agent Visual Orchestrator', readOnlyHint: false, openWorldHint: true },
   claw_command_center: { title: 'VegaClaw Command Center Bridge', readOnlyHint: false, openWorldHint: true },
-  ide_autoclicker: { title: 'VegaClaw IDE AutoClicker', readOnlyHint: false, openWorldHint: false },
   vps_control: { title: 'VegaClaw VPS Direct Control', readOnlyHint: false, openWorldHint: true },
 };
 
@@ -686,7 +684,6 @@ export function getAvailableTools(): Array<{ schema: any; handler: (args: any) =
     tools.push({ schema: mcpRelaySchema, handler: handleMCPRelay });
     tools.push({ schema: theClawSchema, handler: handleTheClaw });
     tools.push({ schema: clawBridgeSchema, handler: handleClawBridge });
-    tools.push({ schema: ideAutoClickerSchema, handler: handleIDEAutoClicker });
     tools.push({ schema: vpsControlSchema, handler: handleVPSControl });
   }
 
